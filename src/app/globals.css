@@ -55,6 +55,11 @@ body {
   background: #EF4444;
 }
 
+/* Hide default cursor on desktop */
+@media (pointer: fine) {
+  * { cursor: none !important; }
+}
+
 /* Custom Cursor */
 .cursor-dot {
   position: fixed;
@@ -66,13 +71,14 @@ body {
   border-radius: 50%;
   pointer-events: none;
   z-index: 99999;
-  transition: transform 0.15s ease;
-  mix-blend-mode: difference;
+  will-change: transform;
 }
 
 .cursor-dot.hovering {
-  transform: scale(3);
+  width: 16px;
+  height: 16px;
   background: #EF4444;
+  transition: width 0.15s ease, height 0.15s ease, background 0.15s ease;
 }
 
 /* Animations */
