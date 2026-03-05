@@ -30,6 +30,7 @@ export default function CasinoPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [totalSession, setTotalSession] = useState(0);
+  const [leaderboard, setLeaderboard] = useState<{ game: string; emoji: string; amount: number; time: number }[]>([]);
 
   useEffect(() => {
     setBalance(getBalance());
@@ -49,11 +50,16 @@ export default function CasinoPage() {
     setTotalSession((t) => t + amount);
     setFlash('win');
     setTimeout(() => setFlash(null), 600);
+    const gameInfo = GAMES.find((g) => g.id === activeGame);
+    setLeaderboard((lb) => {
+      const entry = { game: gameInfo?.name || activeGame, emoji: gameInfo?.emoji || '', amount, time: Date.now() };
+      return [...lb, entry].sort((a, b) => b.amount - a.amount).slice(0, 15);
+    });
     if (user) {
       recordCasinoGame(user.user.email, 0, amount);
       updateCasinoBalance(user.user.email, newBal);
     }
-  }, [user]);
+  }, [user, activeGame]);
 
   const handleLose = useCallback((amount: number) => {
     const result = subtractBalance(amount);
@@ -213,6 +219,32 @@ export default function CasinoPage() {
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* Leaderboard */}
+        {leaderboard.length > 0 && (
+          <div className="mt-8 border border-white/[0.04]">
+            <div className="px-4 py-3 border-b border-white/[0.04] flex items-center justify-between">
+              <span className="text-zinc-400 text-xs tracking-wider uppercase font-bold">Session Leaderboard</span>
+              <span className="text-zinc-700 text-[10px]">top {leaderboard.length} wins</span>
+            </div>
+            <div className="divide-y divide-white/[0.03]">
+              {leaderboard.map((entry, i) => (
+                <div key={`${entry.amount}-${entry.time}`} className="flex items-center justify-between px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-black w-5 ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-zinc-300' : i === 2 ? 'text-orange-400' : 'text-zinc-600'}`}>
+                      {i + 1}.
+                    </span>
+                    <span className="text-base">{entry.emoji}</span>
+                    <span className="text-green-400 text-sm font-bold font-mono">
+                      +${entry.amount.toLocaleString()}
+                    </span>
+                  </div>
+                  <span className="text-zinc-600 text-[10px] sm:text-xs">{entry.game}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Sign in CTA if not logged in */}
         {!user && (
