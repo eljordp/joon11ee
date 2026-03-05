@@ -21,6 +21,7 @@ export default function Crash({ balance, onWin, onLose }: Props) {
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean } | null>(null);
   const [history, setHistory] = useState<{ mult: number; cashed: boolean }[]>([]);
   const [trail, setTrail] = useState<number[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ mult: number; bet: number; win: number }[]>([]);
   const animRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const startTime = useRef(0);
   const cashedAt = useRef(0);
@@ -93,6 +94,11 @@ export default function Crash({ balance, onWin, onLose }: Props) {
     cashedAt.current = multiplier;
     onWin(winAmount);
     setGameState('coasting');
+    setLeaderboard((lb) => {
+      const entry = { mult: parseFloat(multiplier.toFixed(2)), bet, win: winAmount };
+      const updated = [...lb, entry].sort((a, b) => b.win - a.win).slice(0, 10);
+      return updated;
+    });
     setResult({
       text: `+$${winAmount.toLocaleString()}`,
       sub: `cashed at ${multiplier.toFixed(2)}x — waiting for crash...`,
@@ -118,23 +124,39 @@ export default function Crash({ balance, onWin, onLose }: Props) {
       {gameState === 'crashed' && <div className="absolute inset-0 bg-red-500/5 pointer-events-none" />}
       {gameState === 'cashed' && <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-bold text-white">Crash</h3>
         {history.length > 0 && (
-          <div className="flex gap-1.5 overflow-hidden max-w-[200px]">
-            {history.slice(0, 8).map((h, i) => (
-              <span
-                key={i}
-                className={`text-[10px] font-bold px-1.5 py-0.5 ${
-                  h.cashed ? 'text-green-400' : h.mult < 2 ? 'text-red-400' : 'text-zinc-500'
-                }`}
-              >
-                {h.mult}x
-              </span>
-            ))}
-          </div>
+          <span className="text-zinc-600 text-xs">{history.length} rounds</span>
         )}
       </div>
+
+      {/* Crash history */}
+      {history.length > 0 && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1.5 scrollbar-thin -mx-6 px-6 sm:mx-0 sm:px-0">
+          {history.map((h, i) => (
+            <motion.div
+              key={`${h.mult}-${i}`}
+              initial={i === 0 ? { scale: 0, opacity: 0 } : {}}
+              animate={{ scale: 1, opacity: i === 0 ? 1 : 0.6 + (1 - i / history.length) * 0.4 }}
+              className={`flex-shrink-0 px-2.5 py-1.5 text-[11px] font-bold ${
+                h.mult < 1.5
+                  ? 'bg-red-600/20 text-red-400'
+                  : h.mult < 2
+                  ? 'bg-orange-600/15 text-orange-400'
+                  : h.mult < 5
+                  ? 'bg-zinc-800/50 text-zinc-300'
+                  : h.mult < 10
+                  ? 'bg-green-600/15 text-green-400'
+                  : 'bg-yellow-600/15 text-yellow-400'
+              } ${h.cashed ? 'border border-green-500/30' : ''}`}
+            >
+              {h.mult.toFixed(2)}x
+              {h.cashed && <span className="ml-0.5 text-green-400">✓</span>}
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Rocket display */}
       <div className="relative h-48 sm:h-56 border border-white/[0.04] bg-black mb-6 overflow-hidden">
@@ -266,6 +288,38 @@ export default function Crash({ balance, onWin, onLose }: Props) {
         >
           {gameState === 'cashed' ? 'GO AGAIN 🚀' : 'TRY AGAIN 💀'}
         </button>
+      )}
+
+      {/* Leaderboard */}
+      {leaderboard.length > 0 && (
+        <div className="mt-6 border border-white/[0.04]">
+          <div className="px-3 py-2 border-b border-white/[0.04] flex items-center justify-between">
+            <span className="text-zinc-500 text-[10px] tracking-wider uppercase font-bold">Leaderboard</span>
+            <span className="text-zinc-700 text-[10px]">session top {leaderboard.length}</span>
+          </div>
+          <div className="divide-y divide-white/[0.03]">
+            {leaderboard.map((entry, i) => (
+              <div key={`${entry.win}-${entry.mult}-${i}`} className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-black w-5 ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-zinc-300' : i === 2 ? 'text-orange-400' : 'text-zinc-600'}`}>
+                    {i + 1}.
+                  </span>
+                  <span className="text-green-400 text-sm font-bold font-mono">
+                    +${entry.win.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-500 text-[10px]">
+                    ${entry.bet.toLocaleString()} bet
+                  </span>
+                  <span className={`text-xs font-bold ${entry.mult >= 5 ? 'text-yellow-400' : entry.mult >= 3 ? 'text-green-400' : 'text-zinc-400'}`}>
+                    {entry.mult}x
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
