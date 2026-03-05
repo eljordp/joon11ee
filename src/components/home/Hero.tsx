@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import ParticleBackground from '@/components/ui/ParticleBackground';
 import MagneticButton from '@/components/ui/MagneticButton';
@@ -17,16 +18,21 @@ export default function Hero() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-black">
+        {/* Hero background image */}
+        <Image
+          src="/hero-bg.jpg"
+          alt=""
+          fill
+          className="object-cover opacity-40"
+          sizes="100vw"
+          priority
+        />
+
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black z-10" />
 
-        {/* Animated gradient background */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute inset-0 bg-gradient-to-br from-red-950/50 via-black to-black animate-gradient" />
-        </div>
-
         {/* Red accent light */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(800px,150vw)] h-[min(800px,150vw)] bg-red-600/10 rounded-full blur-[150px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(800px,150vw)] h-[min(800px,150vw)] bg-red-600/10 rounded-full blur-[150px] z-[5]" />
       </div>
 
       <div className="hidden md:block">
