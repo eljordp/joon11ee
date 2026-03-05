@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { fleet, cities, formatPrice, type City, type Car } from '@/data/fleet';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import ParticleBackground from '@/components/ui/ParticleBackground';
+import CarImage from '@/components/fleet/CarImage';
 import { Suspense } from 'react';
 
 function FleetContent() {
@@ -140,12 +141,10 @@ function CarCard({ car, index }: { car: Car; index: number }) {
     >
       <Link href={`/fleet/${car.slug}`} className="group block" data-hover>
         <div className="relative overflow-hidden border border-white/[0.06] hover:border-red-600/30 transition-all duration-500">
-          {/* Image placeholder */}
           <div className="relative aspect-[16/10] overflow-hidden">
-            <div
-              className="absolute inset-0 transition-transform duration-700 group-hover:scale-110"
-              style={{ background: car.gradient }}
-            />
+            <div className="absolute inset-0 transition-transform duration-700 group-hover:scale-110">
+              <CarImage car={car} sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+            </div>
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
 
             <div className="absolute top-4 left-4 flex gap-2">

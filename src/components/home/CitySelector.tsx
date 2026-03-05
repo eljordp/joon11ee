@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cities, getCarsByCity, type City } from '@/data/fleet';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
+import CarImage from '@/components/fleet/CarImage';
 import Link from 'next/link';
 
 export default function CitySelector() {
@@ -96,10 +97,9 @@ export default function CitySelector() {
                   className="group relative aspect-[4/3] overflow-hidden border border-white/[0.06] hover:border-red-600/30 transition-all duration-500"
                   data-hover
                 >
-                  <div
-                    className="absolute inset-0 transition-transform duration-700 group-hover:scale-110"
-                    style={{ background: car.gradient }}
-                  />
+                  <div className="absolute inset-0 transition-transform duration-700 group-hover:scale-110">
+                    <CarImage car={car} sizes="(max-width: 1024px) 50vw, 25vw" />
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4">
                     <p className="text-zinc-500 text-xs uppercase tracking-wider">{car.brand}</p>

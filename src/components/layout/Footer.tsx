@@ -73,9 +73,8 @@ export default function Footer() {
               <li className="text-zinc-500 text-sm">info@joon11ee.com</li>
               <li className="text-zinc-500 text-sm">(415) 555-0111</li>
               <li className="flex gap-4 mt-4">
-                <a href="#" className="text-zinc-500 hover:text-red-500 transition-colors" data-hover>IG</a>
-                <a href="#" className="text-zinc-500 hover:text-red-500 transition-colors" data-hover>TW</a>
-                <a href="#" className="text-zinc-500 hover:text-red-500 transition-colors" data-hover>TT</a>
+                <a href="https://www.instagram.com/joon11ee/" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-red-500 transition-colors" data-hover>IG</a>
+                <a href="https://www.tiktok.com/@joon11ee" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-red-500 transition-colors" data-hover>TT</a>
               </li>
             </ul>
           </div>

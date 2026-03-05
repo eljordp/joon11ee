@@ -171,14 +171,19 @@ export default function ContactPage() {
               <div className="p-8 border border-white/[0.06]">
                 <h3 className="text-white font-bold text-lg mb-4">Follow Us</h3>
                 <div className="flex gap-4">
-                  {['Instagram', 'Twitter', 'TikTok', 'YouTube'].map((social) => (
+                  {[
+                    { name: 'Instagram', url: 'https://www.instagram.com/joon11ee/' },
+                    { name: 'TikTok', url: 'https://www.tiktok.com/@joon11ee' },
+                  ].map((social) => (
                     <a
-                      key={social}
-                      href="#"
+                      key={social.name}
+                      href={social.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="px-4 py-2 border border-white/[0.08] text-zinc-400 text-sm hover:border-red-600/30 hover:text-white transition-all duration-300"
                       data-hover
                     >
-                      {social}
+                      {social.name}
                     </a>
                   ))}
                 </div>

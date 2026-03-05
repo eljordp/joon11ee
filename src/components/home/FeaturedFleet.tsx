@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { getFeaturedCars, formatPrice } from '@/data/fleet';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
+import CarImage from '@/components/fleet/CarImage';
 
 export default function FeaturedFleet() {
   const featured = getFeaturedCars();
@@ -45,12 +46,10 @@ export default function FeaturedFleet() {
                   whileHover={{ y: -8 }}
                   className="relative overflow-hidden border border-white/[0.06] hover:border-red-600/30 transition-all duration-500"
                 >
-                  {/* Car image placeholder */}
                   <div className="relative aspect-[16/10] overflow-hidden">
-                    <div
-                      className="absolute inset-0 transition-transform duration-700 group-hover:scale-110"
-                      style={{ background: car.gradient }}
-                    />
+                    <div className="absolute inset-0 transition-transform duration-700 group-hover:scale-110">
+                      <CarImage car={car} sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
 
                     {/* City badge */}

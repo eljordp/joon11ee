@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import { fleet, cities, getCarsByCity, getCarBySlug, formatPrice, type City, type Car } from '@/data/fleet';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import ParticleBackground from '@/components/ui/ParticleBackground';
@@ -213,7 +214,11 @@ function BookingContent() {
                         data-hover
                       >
                         <div className="aspect-[16/10] relative overflow-hidden">
-                          <div className="absolute inset-0" style={{ background: car.gradient }} />
+                          {car.image ? (
+                            <Image src={car.image} alt={`${car.brand} ${car.name}`} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                          ) : (
+                            <div className="absolute inset-0" style={{ background: car.gradient }} />
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                         </div>
                         <div className="p-4">
@@ -303,7 +308,13 @@ function BookingContent() {
                   <div className="border border-white/[0.08] p-4 sm:p-8 space-y-6">
                     {/* Car summary */}
                     <div className="flex items-center gap-4 pb-6 border-b border-white/[0.06]">
-                      <div className="w-20 h-14 overflow-hidden flex-shrink-0" style={{ background: booking.car.gradient }} />
+                      <div className="w-20 h-14 overflow-hidden flex-shrink-0 relative">
+                        {booking.car.image ? (
+                          <Image src={booking.car.image} alt={`${booking.car.brand} ${booking.car.name}`} fill className="object-cover" sizes="80px" />
+                        ) : (
+                          <div className="absolute inset-0" style={{ background: booking.car.gradient }} />
+                        )}
+                      </div>
                       <div>
                         <p className="text-zinc-500 text-xs tracking-wider uppercase">{booking.car.brand}</p>
                         <p className="text-white font-bold">{booking.car.name}</p>

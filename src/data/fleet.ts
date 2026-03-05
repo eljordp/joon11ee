@@ -67,6 +67,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Carbon Ceramic Brakes', 'Lift System', 'Navigation'],
     color: 'Verde Mantis',
     gradient: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+    image: '/cars/huracan-evo.jpg',
     featured: true,
   },
   {
@@ -89,6 +90,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Carbon Fiber Package', 'Racing Seats', 'Telemetry'],
     color: 'Rosso Corsa',
     gradient: 'linear-gradient(135deg, #2d1b1b 0%, #4a1010 50%, #6b1515 100%)',
+    image: '/cars/ferrari-488.jpg',
     featured: true,
   },
   {
@@ -111,6 +113,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Active Aero', 'Proactive Chassis', 'Folding Display'],
     color: 'Papaya Spark',
     gradient: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #404040 100%)',
+    image: '/cars/mclaren-720s.jpg',
   },
   {
     id: 'sf-4',
@@ -132,6 +135,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Sport Chrono', 'PCCB Brakes', 'Burmester Audio'],
     color: 'GT Silver',
     gradient: 'linear-gradient(135deg, #1c1c1c 0%, #333333 50%, #4a4a4a 100%)',
+    image: '/cars/porsche-911.jpg',
   },
   {
     id: 'sf-5',
@@ -153,6 +157,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Starlight Headliner', 'Bespoke Audio', 'Night Vision'],
     color: 'Black Diamond',
     gradient: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #2a2a2a 100%)',
+    image: '/cars/cullinan.jpg',
   },
 
   // Los Angeles Fleet
@@ -176,6 +181,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Carbon Package', 'Akrapovič Exhaust', 'Rally Mode'],
     color: 'Nero Noctis',
     gradient: 'linear-gradient(135deg, #1a0a0a 0%, #2d1111 50%, #401a1a 100%)',
+    image: '/cars/urus.jpg',
     featured: true,
   },
   {
@@ -198,6 +204,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Hybrid', 'Assetto Fiorano', 'eManettino'],
     color: 'Rosso Scuderia',
     gradient: 'linear-gradient(135deg, #3d0c0c 0%, #5c1010 50%, #7a1515 100%)',
+    image: '/cars/sf90.jpg',
     featured: true,
   },
   {
@@ -220,6 +227,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Naim Audio', 'Rotating Display', 'Diamond Knurling'],
     color: 'Glacier White',
     gradient: 'linear-gradient(135deg, #1a1a2e 0%, #22223b 50%, #2a2a4a 100%)',
+    image: '/cars/bentley-gt.jpg',
   },
   {
     id: 'la-4',
@@ -241,6 +249,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Active Aero', 'Carbon Roof', 'Track Package'],
     color: 'Magno Black',
     gradient: 'linear-gradient(135deg, #111111 0%, #1f1f1f 50%, #333333 100%)',
+    image: '/cars/amg-gt.jpg',
   },
   {
     id: 'la-5',
@@ -262,6 +271,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Bowers & Wilkins', 'Carbon Ceramic', 'Adaptive Dampers'],
     color: 'Lunar White',
     gradient: 'linear-gradient(135deg, #0f1923 0%, #1a2a3a 50%, #243b4f 100%)',
+    image: '/cars/aston-db12.jpg',
   },
 
   // Miami Fleet
@@ -285,6 +295,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'ALA 2.0 Aero', 'Carbon Fiber Monocoque', 'Haldex Gen IV'],
     color: 'Arancio Atlas',
     gradient: 'linear-gradient(135deg, #2d1a00 0%, #4a2800 50%, #663800 100%)',
+    image: '/cars/aventador.jpg',
     featured: true,
   },
   {
@@ -307,6 +318,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Virtual Short Wheelbase', 'Carbon Brakes', 'JBL Pro Audio'],
     color: 'Giallo Modena',
     gradient: 'linear-gradient(135deg, #2d2d00 0%, #4a4a00 50%, #666600 100%)',
+    image: '/cars/ferrari-812.jpg',
   },
   {
     id: 'mia-3',
@@ -328,6 +340,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Longtail Design', 'Titanium Exhaust', 'Senna DNA'],
     color: 'Curacao Blue',
     gradient: 'linear-gradient(135deg, #0a1628 0%, #132b4a 50%, #1c3f6e 100%)',
+    image: '/cars/mclaren-765lt.jpg',
   },
   {
     id: 'mia-4',
@@ -349,6 +362,7 @@ export const fleet: Car[] = [
     features: ['RWD', 'Convertible', 'Starlight Headliner', 'Bespoke Audio'],
     color: 'Black Diamond',
     gradient: 'linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 50%, #252525 100%)',
+    image: '/cars/rr-dawn.jpg',
     featured: true,
   },
   {
@@ -371,6 +385,7 @@ export const fleet: Car[] = [
     features: ['AWD', 'Carbon Fiber Body', 'Titanium Exhaust', 'Top Speed Mode'],
     color: 'Atlantic Blue/Black',
     gradient: 'linear-gradient(135deg, #050520 0%, #0a0a40 50%, #101060 100%)',
+    image: '/cars/chiron.jpg',
     featured: true,
   },
 ];

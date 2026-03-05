@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { formatPrice, type Car } from '@/data/fleet';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import MagneticButton from '@/components/ui/MagneticButton';
@@ -50,10 +51,18 @@ export default function CarDetailClient({ car, city }: CarDetailClientProps) {
               transition={{ duration: 0.8 }}
               className="relative aspect-[4/3] overflow-hidden border border-white/[0.06]"
             >
-              <div
-                className="absolute inset-0"
-                style={{ background: car.gradient }}
-              />
+              {car.image ? (
+                <Image
+                  src={car.image}
+                  alt={`${car.brand} ${car.name}`}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority
+                />
+              ) : (
+                <div className="absolute inset-0" style={{ background: car.gradient }} />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
               {/* Color badge */}
