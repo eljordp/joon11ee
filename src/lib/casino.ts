@@ -100,3 +100,60 @@ export function handValue(hand: Card[]): number {
 export function isRed(suit: string): boolean {
   return suit === '♥' || suit === '♦';
 }
+
+// --- Provably Fair ---
+
+export function generateSeed(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function hashSeed(seed: string): Promise<string> {
+  const data = new TextEncoder().encode(seed);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function createSeededDeck(serverSeed: string, clientSeed: string): Card[] {
+  const deck: Card[] = [];
+  for (const suit of SUITS) {
+    for (let i = 0; i < RANKS.length; i++) {
+      deck.push({ suit, rank: RANKS[i], value: i === 0 ? 11 : Math.min(i + 1, 10) });
+    }
+  }
+  const combined = serverSeed + ':' + clientSeed;
+  let seedNum = 0;
+  for (let i = 0; i < combined.length; i++) {
+    seedNum = ((seedNum << 5) - seedNum + combined.charCodeAt(i)) | 0;
+  }
+  const rng = mulberry32(Math.abs(seedNum));
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+// --- Username ---
+
+const USERNAME_KEY = 'joon11ee_username';
+
+export function getUsername(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(USERNAME_KEY) || '';
+}
+
+export function setUsername(name: string): void {
+  localStorage.setItem(USERNAME_KEY, name.trim().slice(0, 16));
+}

@@ -17,6 +17,8 @@ interface Props {
   balance: number;
   onWin: (amount: number) => void;
   onLose: (amount: number) => void;
+  onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
+  username?: string;
 }
 
 interface SeatState {
@@ -76,7 +78,7 @@ function PlayingCard({ card, hidden = false, index, small = false }: { card: Car
   );
 }
 
-export default function MultiplayerBlackjack({ balance, onWin, onLose }: Props) {
+export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [bet, setBet] = useState(100);
@@ -92,7 +94,8 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose }: Props) 
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
-  const playerName = useRef('Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
+  const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
+  useEffect(() => { if (username) playerName.current = username; }, [username]);
 
   const connectToRoom = useCallback((id: string) => {
     if (wsRef.current) wsRef.current.close();
@@ -147,19 +150,30 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose }: Props) 
 
           if (state.phase === 'dealer_turn') sounds.cardFlip();
 
-          if (state.phase === 'results' && mySeat && mySeat.bet > 0 && mySeat.hand.length > 0) {
-            if (mySeat.profit > 0) {
-              sounds.win();
-              onWin(mySeat.profit + mySeat.bet);
-              const isBJ = mySeat.handValue === 21 && mySeat.hand.length === 2;
-              setResult({ text: `+$${mySeat.profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: true });
-              if (isBJ) sounds.jackpot();
-            } else if (mySeat.profit < 0) {
-              sounds.lose();
-              onLose(Math.abs(mySeat.profit));
-              setResult({ text: `-$${Math.abs(mySeat.profit).toLocaleString()}`, sub: mySeat.handValue > 21 ? 'BUST' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: false });
-            } else {
-              setResult({ text: 'PUSH', sub: `both ${mySeat.handValue}`, win: null });
+          if (state.phase === 'results') {
+            // Report own results
+            if (mySeat && mySeat.bet > 0 && mySeat.hand.length > 0) {
+              if (mySeat.profit > 0) {
+                sounds.win();
+                onWin(mySeat.profit + mySeat.bet);
+                const isBJ = mySeat.handValue === 21 && mySeat.hand.length === 2;
+                setResult({ text: `+$${mySeat.profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: true });
+                if (isBJ) sounds.jackpot();
+              } else if (mySeat.profit < 0) {
+                sounds.lose();
+                onLose(Math.abs(mySeat.profit));
+                setResult({ text: `-$${Math.abs(mySeat.profit).toLocaleString()}`, sub: mySeat.handValue > 21 ? 'BUST' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: false });
+              } else {
+                setResult({ text: 'PUSH', sub: `both ${mySeat.handValue}`, win: null });
+              }
+            }
+            // Report other players' wins to leaderboard
+            if (onLeaderboardEntry) {
+              state.seats.forEach((s) => {
+                if (s.player && s.player.id !== selfId && s.profit >= 500) {
+                  onLeaderboardEntry({ player: s.player.name, game: 'Table BJ', emoji: '🃏', amount: s.profit });
+                }
+              });
             }
           }
 

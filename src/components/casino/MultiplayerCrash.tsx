@@ -17,6 +17,8 @@ interface Props {
   balance: number;
   onWin: (amount: number) => void;
   onLose: (amount: number) => void;
+  onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
+  username?: string;
 }
 
 interface ServerState {
@@ -35,7 +37,7 @@ interface ServerState {
   history: { crashPoint: number; roundNumber: number }[];
 }
 
-export default function MultiplayerCrash({ balance, onWin, onLose }: Props) {
+export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -55,8 +57,9 @@ export default function MultiplayerCrash({ balance, onWin, onLose }: Props) {
   const flyingStartRef = useRef(0);
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Generate a player name
-  const playerName = useRef('Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
+  const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
+  // Keep playerName in sync with username prop
+  useEffect(() => { if (username) playerName.current = username; }, [username]);
 
   const connectToRoom = useCallback((id: string) => {
     if (wsRef.current) wsRef.current.close();
@@ -160,6 +163,11 @@ export default function MultiplayerCrash({ balance, onWin, onLose }: Props) {
           if ((data.multiplier as number) >= 5) sounds.jackpot();
         } else {
           try { sounds.click(); } catch {}
+          // Report other players' wins to leaderboard
+          const profit = data.profit as number;
+          if (profit >= 500 && onLeaderboardEntry) {
+            onLeaderboardEntry({ player: data.playerName as string, game: 'Crash MP', emoji: '🚀', amount: profit });
+          }
         }
         break;
       }
