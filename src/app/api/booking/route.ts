@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 
-const NOTIFY_EMAIL = 'Jolee1205@gmail.com';
+const NOTIFY_EMAIL = 'jolee1205@gmail.com';
 
 export async function POST(request: Request) {
   try {
