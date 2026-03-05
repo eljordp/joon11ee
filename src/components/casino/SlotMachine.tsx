@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { sounds } from '@/lib/sounds';
 
 const SYMBOLS = ['🏎️', '💎', '🔥', '💰', '⭐', '🍀', '👑', '🎰'];
 const PAYOUTS: Record<string, { mult: number; name: string }> = {
@@ -50,6 +51,8 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
 
   const spin = useCallback(() => {
     if (spinning.some(Boolean) || balance < bet) return;
+    sounds.spinStart();
+    sounds.bet();
     setResult(null);
     setSpinning([true, true, true]);
 
@@ -67,6 +70,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       let pos = 0;
       intervals.current[i] = setInterval(() => {
         pos++;
+        if (pos % 3 === 0) sounds.slotTick();
         setReelPositions((prev) => {
           const next = [...prev];
           next[i] = pos % REEL_SIZE;
@@ -77,6 +81,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       // Stop reel
       setTimeout(() => {
         clearInterval(intervals.current[i]);
+        sounds.reelStop();
         setReelPositions((prev) => {
           const next = [...prev];
           next[i] = REEL_SIZE - 1;
@@ -100,6 +105,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
     if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
       const p = PAYOUTS[symbols[0]];
       const winAmount = bet * p.mult;
+      sounds.jackpot();
       onWin(winAmount);
       setStreak((s) => s + 1);
       setShaking(true);
@@ -111,10 +117,12 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       });
     } else if (symbols[0] === symbols[1] || symbols[1] === symbols[2] || symbols[0] === symbols[2]) {
       const winAmount = Math.floor(bet * 2);
+      sounds.win();
       onWin(winAmount);
       setStreak((s) => s + 1);
       setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'PAIR — 2x', win: true });
     } else {
+      sounds.lose();
       onLose(bet);
       setStreak(0);
       setResult({ text: `-$${bet.toLocaleString()}`, sub: 'no cap that was rough', win: false });
@@ -199,7 +207,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
         {[50, 100, 250, 500, 1000].map((amount) => (
           <button
             key={amount}
-            onClick={() => !isSpinning && setBet(amount)}
+            onClick={() => { if (!isSpinning) { sounds.click(); setBet(amount); } }}
             className={`px-3 py-2 text-xs font-bold transition-all ${
               bet === amount
                 ? 'bg-red-600 text-white'

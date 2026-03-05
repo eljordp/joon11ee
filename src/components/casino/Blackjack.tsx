@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createDeck, handValue, isRed, type Card } from '@/lib/casino';
+import { sounds } from '@/lib/sounds';
 
 interface Props {
   balance: number;
@@ -65,6 +66,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
 
   const deal = useCallback(() => {
     if (balance < bet) return;
+    sounds.bet();
     const newDeck = createDeck();
     const pHand = [newDeck.pop()!, newDeck.pop()!];
     const dHand = [newDeck.pop()!, newDeck.pop()!];
@@ -74,6 +76,10 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
     setGameState('playing');
     setResult(null);
     setDoubled(false);
+    setTimeout(() => sounds.cardDeal(), 50);
+    setTimeout(() => sounds.cardDeal(), 200);
+    setTimeout(() => sounds.cardDeal(), 350);
+    setTimeout(() => sounds.cardDeal(), 500);
 
     if (handValue(pHand) === 21) {
       finishGame(pHand, dHand, newDeck, false);
@@ -81,6 +87,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
   }, [balance, bet]);
 
   const hit = useCallback(() => {
+    sounds.cardDeal();
     const newDeck = [...deck];
     const newHand = [...playerHand, newDeck.pop()!];
     setDeck(newDeck);
@@ -88,6 +95,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
 
     if (handValue(newHand) > 21) {
       const actualBet = doubled ? bet * 2 : bet;
+      sounds.lose();
       setGameState('done');
       onLose(actualBet);
       setWins(0);
@@ -98,11 +106,14 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
   }, [deck, playerHand, dealerHand, bet, doubled, onLose]);
 
   const stand = useCallback(() => {
+    sounds.click();
     finishGame(playerHand, dealerHand, deck, doubled);
   }, [playerHand, dealerHand, deck, doubled]);
 
   const doubleDown = useCallback(() => {
     if (balance < bet * 2 || playerHand.length !== 2) return;
+    sounds.bet();
+    sounds.cardDeal();
     setDoubled(true);
     const newDeck = [...deck];
     const newHand = [...playerHand, newDeck.pop()!];
@@ -110,6 +121,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
     setPlayerHand(newHand);
 
     if (handValue(newHand) > 21) {
+      sounds.lose();
       setGameState('done');
       onLose(bet * 2);
       setWins(0);
@@ -125,6 +137,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
     let newDealerHand = [...dHand];
 
     setTimeout(() => {
+      sounds.cardFlip();
       while (handValue(newDealerHand) < 17) {
         newDealerHand = [...newDealerHand, newDeck.pop()!];
       }
@@ -139,12 +152,14 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         setGameState('done');
         if (dVal > 21) {
           const winAmount = actualBet * 2;
+          sounds.win();
           onWin(winAmount);
           setWins((w) => w + 1);
           setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'dealer busted lmao 😂', win: true });
         } else if (pVal > dVal) {
           const isBlackjack = pVal === 21 && pHand.length === 2;
           const winAmount = isBlackjack ? Math.floor(actualBet * 2.5) : actualBet * 2;
+          if (isBlackjack) sounds.jackpot(); else sounds.win();
           onWin(winAmount);
           setWins((w) => w + 1);
           setResult({
@@ -153,6 +168,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
             win: true,
           });
         } else if (pVal < dVal) {
+          sounds.lose();
           onLose(actualBet);
           setWins(0);
           setResult({ text: `-$${actualBet.toLocaleString()}`, sub: `${pVal} vs ${dVal} — not it 😔`, win: false });

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ROULETTE_NUMBERS } from '@/lib/casino';
+import { sounds } from '@/lib/sounds';
 
 type BetType = 'red' | 'black' | 'green' | 'odd' | 'even' | 'low' | 'high';
 
@@ -35,6 +36,8 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
 
   const spin = useCallback(() => {
     if (spinning || balance < bet) return;
+    sounds.bet();
+    sounds.spinStart();
     setResult(null);
     setLandedNumber(null);
     setSpinning(true);
@@ -49,10 +52,12 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
 
     const animate = () => {
       pos++;
+      sounds.ballBounce();
       setBallPosition(pos % ROULETTE_NUMBERS.length);
 
       if (pos >= totalSteps) {
         // Land on winner
+        sounds.ballLand();
         setBallPosition(winnerIndex);
         setLandedNumber({ num: winner.num, color: winner.color });
         setHistory((h) => [{ num: winner.num, color: winner.color }, ...h.slice(0, 19)]);
@@ -71,6 +76,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
 
         if (won) {
           const winAmount = bet * option.payout;
+          if (betType === 'green') sounds.jackpot(); else sounds.win();
           onWin(winAmount);
           setResult({
             text: `+$${winAmount.toLocaleString()}`,
@@ -78,6 +84,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
             win: true,
           });
         } else {
+          sounds.lose();
           onLose(bet);
           setResult({
             text: `-$${bet.toLocaleString()}`,
@@ -169,7 +176,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
         {BETS.map((option) => (
           <button
             key={option.type}
-            onClick={() => !spinning && setBetType(option.type)}
+            onClick={() => { if (!spinning) { sounds.click(); setBetType(option.type); } }}
             className={`px-2 py-3 text-xs font-bold transition-all text-center ${option.bg} ${
               betType === option.type ? 'ring-2 ring-white/50 text-white scale-105' : 'text-zinc-300'
             }`}
@@ -186,7 +193,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
         {[50, 100, 250, 500, 1000].map((amount) => (
           <button
             key={amount}
-            onClick={() => !spinning && setBet(amount)}
+            onClick={() => { if (!spinning) { sounds.click(); setBet(amount); } }}
             className={`px-3 py-2 text-xs font-bold transition-all ${
               bet === amount
                 ? 'bg-red-600 text-white'
