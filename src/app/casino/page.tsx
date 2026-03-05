@@ -42,7 +42,17 @@ export default function CasinoPage() {
         setBalance(session.casinoBalance);
       }
     }
+    try {
+      const saved = localStorage.getItem('casino_leaderboard');
+      if (saved) setLeaderboard(JSON.parse(saved));
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    if (leaderboard.length > 0) {
+      try { localStorage.setItem('casino_leaderboard', JSON.stringify(leaderboard)); } catch {}
+    }
+  }, [leaderboard]);
 
   const handleWin = useCallback((amount: number) => {
     const newBal = addBalance(amount);

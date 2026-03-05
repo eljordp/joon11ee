@@ -13,6 +13,27 @@ interface Props {
 
 type GameState = 'betting' | 'flying' | 'crashed' | 'cashed' | 'coasting';
 
+function generateSeedHistory(): { mult: number; cashed: boolean }[] {
+  const seeds: { mult: number; cashed: boolean }[] = [];
+  const mults = [1.12, 3.47, 1.89, 7.22, 2.14, 1.03, 4.55, 12.81, 1.67, 2.93, 1.41, 24.6, 1.78, 5.11, 1.22];
+  for (const m of mults) {
+    seeds.push({ mult: m, cashed: m > 2 ? Math.random() > 0.4 : Math.random() > 0.7 });
+  }
+  return seeds;
+}
+
+function loadHistory(): { mult: number; cashed: boolean }[] {
+  try {
+    const saved = localStorage.getItem('crash_history');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return generateSeedHistory();
+}
+
+function saveHistory(h: { mult: number; cashed: boolean }[]) {
+  try { localStorage.setItem('crash_history', JSON.stringify(h.slice(0, 30))); } catch {}
+}
+
 export default function Crash({ balance, onWin, onLose }: Props) {
   const [bet, setBet] = useState(100);
   const [multiplier, setMultiplier] = useState(1.0);
@@ -27,8 +48,13 @@ export default function Crash({ balance, onWin, onLose }: Props) {
   const crashRef = useRef(0);
 
   useEffect(() => {
+    setHistory(loadHistory());
     return () => { if (animRef.current) clearInterval(animRef.current); };
   }, []);
+
+  useEffect(() => {
+    if (history.length > 0) saveHistory(history);
+  }, [history]);
 
   const launch = useCallback(() => {
     if (gameState !== 'betting' || balance < bet) return;
