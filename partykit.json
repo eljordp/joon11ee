@@ -1,0 +1,10 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "joon11ee-casino",
+  "main": "party/crash.ts",
+  "parties": {
+    "crash": "party/crash.ts",
+    "blackjack": "party/blackjack.ts"
+  },
+  "compatibilityDate": "2024-09-01"
+}
