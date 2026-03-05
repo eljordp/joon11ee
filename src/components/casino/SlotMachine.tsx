@@ -1,8 +1,29 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SLOT_SYMBOLS, SLOT_PAYOUTS } from '@/lib/casino';
+
+const SYMBOLS = ['🏎️', '💎', '🔥', '💰', '⭐', '🍀', '👑', '🎰'];
+const PAYOUTS: Record<string, { mult: number; name: string }> = {
+  '🏎️': { mult: 69, name: 'LAMBO JACKPOT' },
+  '💎': { mult: 42, name: 'DIAMOND HANDS' },
+  '🔥': { mult: 25, name: 'FIRE TRIPLE' },
+  '💰': { mult: 15, name: 'MONEY BAGS' },
+  '⭐': { mult: 10, name: 'STAR POWER' },
+  '🍀': { mult: 7, name: 'LUCKY STREAK' },
+  '👑': { mult: 5, name: 'CROWN ROYAL' },
+  '🎰': { mult: 3, name: 'SLOTS BABY' },
+};
+
+const REEL_SIZE = 20;
+
+function generateReelStrip(): string[] {
+  const strip: string[] = [];
+  for (let i = 0; i < REEL_SIZE; i++) {
+    strip.push(SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+  }
+  return strip;
+}
 
 interface Props {
   balance: number;
@@ -11,118 +32,175 @@ interface Props {
 }
 
 export default function SlotMachine({ balance, onWin, onLose }: Props) {
-  const [reels, setReels] = useState(['🏎️', '🏎️', '🏎️']);
-  const [spinning, setSpinning] = useState(false);
+  const [reelStrips, setReelStrips] = useState<string[][]>([
+    generateReelStrip(), generateReelStrip(), generateReelStrip()
+  ]);
+  const [reelPositions, setReelPositions] = useState([0, 0, 0]);
+  const [spinning, setSpinning] = useState([false, false, false]);
   const [bet, setBet] = useState(100);
-  const [result, setResult] = useState<{ text: string; win: boolean } | null>(null);
-  const [intermediateReels, setIntermediateReels] = useState<string[][]>([[], [], []]);
+  const [result, setResult] = useState<{ text: string; sub: string; win: boolean } | null>(null);
+  const [streak, setStreak] = useState(0);
+  const [shaking, setShaking] = useState(false);
+  const intervals = useRef<ReturnType<typeof setInterval>[]>([]);
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => intervals.current.forEach(clearInterval);
+  }, []);
 
   const spin = useCallback(() => {
-    if (spinning || balance < bet) return;
+    if (spinning.some(Boolean) || balance < bet) return;
     setResult(null);
-    setSpinning(true);
+    setSpinning([true, true, true]);
 
-    // Animate intermediate symbols
-    const intervals = [0, 1, 2].map((i) => {
-      const frames: string[] = [];
-      const count = 10 + i * 5;
-      for (let j = 0; j < count; j++) {
-        frames.push(SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]);
-      }
-      return frames;
+    // Generate new strips with final symbols
+    const finalSymbols = [0, 1, 2].map(() => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+    const newStrips = [0, 1, 2].map((i) => {
+      const strip = generateReelStrip();
+      strip[strip.length - 1] = finalSymbols[i];
+      return strip;
     });
-    setIntermediateReels(intervals);
+    setReelStrips(newStrips);
 
-    // Final results
-    const finalReels = [0, 1, 2].map(() =>
-      SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]
-    );
+    // Animate each reel
+    [0, 1, 2].forEach((i) => {
+      let pos = 0;
+      intervals.current[i] = setInterval(() => {
+        pos++;
+        setReelPositions((prev) => {
+          const next = [...prev];
+          next[i] = pos % REEL_SIZE;
+          return next;
+        });
+      }, 60 + i * 15);
 
-    // Staggered stop
-    const delays = [600, 1000, 1400];
-    const newReels = [...reels];
-
-    delays.forEach((delay, i) => {
+      // Stop reel
       setTimeout(() => {
-        newReels[i] = finalReels[i];
-        setReels([...newReels]);
+        clearInterval(intervals.current[i]);
+        setReelPositions((prev) => {
+          const next = [...prev];
+          next[i] = REEL_SIZE - 1;
+          return next;
+        });
+        setSpinning((prev) => {
+          const next = [...prev];
+          next[i] = false;
+          return next;
+        });
+
+        // Last reel stopped
         if (i === 2) {
-          // Check win
-          if (finalReels[0] === finalReels[1] && finalReels[1] === finalReels[2]) {
-            const multiplier = SLOT_PAYOUTS[finalReels[0]] || 2;
-            const winAmount = bet * multiplier;
-            onWin(winAmount);
-            setResult({ text: `JACKPOT! +$${winAmount.toLocaleString()}`, win: true });
-          } else if (finalReels[0] === finalReels[1] || finalReels[1] === finalReels[2]) {
-            const winAmount = Math.floor(bet * 1.5);
-            onWin(winAmount);
-            setResult({ text: `PAIR! +$${winAmount.toLocaleString()}`, win: true });
-          } else {
-            onLose(bet);
-            setResult({ text: `-$${bet.toLocaleString()}`, win: false });
-          }
-          setSpinning(false);
+          setTimeout(() => checkResult(finalSymbols), 150);
         }
-      }, delay);
+      }, 800 + i * 400);
     });
-  }, [spinning, balance, bet, reels, onWin, onLose]);
+  }, [spinning, balance, bet]);
+
+  const checkResult = (symbols: string[]) => {
+    if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
+      const p = PAYOUTS[symbols[0]];
+      const winAmount = bet * p.mult;
+      onWin(winAmount);
+      setStreak((s) => s + 1);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      setResult({
+        text: `+$${winAmount.toLocaleString()}`,
+        sub: `${p.name} ${p.mult}x`,
+        win: true,
+      });
+    } else if (symbols[0] === symbols[1] || symbols[1] === symbols[2] || symbols[0] === symbols[2]) {
+      const winAmount = Math.floor(bet * 2);
+      onWin(winAmount);
+      setStreak((s) => s + 1);
+      setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'PAIR — 2x', win: true });
+    } else {
+      onLose(bet);
+      setStreak(0);
+      setResult({ text: `-$${bet.toLocaleString()}`, sub: 'no cap that was rough', win: false });
+    }
+  };
+
+  const isSpinning = spinning.some(Boolean);
 
   return (
-    <div className="border border-white/[0.06] p-6 sm:p-8">
-      <h3 className="text-xl font-bold text-white mb-6 text-center">Slots</h3>
+    <motion.div
+      animate={shaking ? { x: [0, -5, 5, -5, 5, 0] } : {}}
+      transition={{ duration: 0.4 }}
+      className="border border-white/[0.06] bg-zinc-950/50 p-6 sm:p-8 relative overflow-hidden"
+    >
+      {/* Glow on win */}
+      {result?.win && (
+        <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />
+      )}
+
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-white">Slots</h3>
+        {streak > 1 && (
+          <motion.span
+            key={streak}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="text-xs font-bold px-3 py-1 bg-red-600/20 border border-red-600/30 text-red-400"
+          >
+            {streak} streak 🔥
+          </motion.span>
+        )}
+      </div>
 
       {/* Reels */}
-      <div className="flex justify-center gap-3 mb-6">
-        {reels.map((symbol, i) => (
-          <div
-            key={i}
-            className="w-24 h-28 border-2 border-white/10 bg-black flex items-center justify-center overflow-hidden relative"
-          >
-            {spinning && intermediateReels[i]?.length > 0 ? (
-              <motion.div
-                key={`spin-${i}`}
-                animate={{ y: [0, -40, 0, 40, 0] }}
-                transition={{ repeat: Infinity, duration: 0.15, ease: 'linear' }}
-                className="text-4xl"
-              >
-                {SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)]}
-              </motion.div>
-            ) : (
-              <motion.span
-                key={`${symbol}-${i}`}
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="text-5xl"
-              >
-                {symbol}
-              </motion.span>
+      <div className="flex justify-center gap-2 sm:gap-4 mb-4">
+        {[0, 1, 2].map((reelIndex) => (
+          <div key={reelIndex} className="relative w-24 sm:w-28 h-24 sm:h-28 border-2 border-white/10 bg-black overflow-hidden">
+            {/* Win glow */}
+            {result?.win && !isSpinning && (
+              <div className="absolute inset-0 border-2 border-green-500/50 z-10 pointer-events-none" />
             )}
+            <div
+              className="transition-transform"
+              style={{
+                transform: `translateY(-${reelPositions[reelIndex] * 96}px)`,
+                transition: spinning[reelIndex] ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1.2)',
+              }}
+            >
+              {reelStrips[reelIndex].map((symbol, j) => (
+                <div key={j} className="w-full h-24 sm:h-28 flex items-center justify-center text-5xl sm:text-6xl">
+                  {symbol}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
 
       {/* Result */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {result && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
+            key={result.text}
+            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0 }}
-            className={`text-center mb-6 text-lg font-bold ${result.win ? 'text-green-400' : 'text-red-400'}`}
+            className="text-center mb-6"
           >
-            {result.text}
+            <p className={`text-2xl sm:text-3xl font-black ${result.win ? 'text-green-400' : 'text-red-400'}`}>
+              {result.text}
+            </p>
+            <p className={`text-xs mt-1 ${result.win ? 'text-green-500/70' : 'text-zinc-600'}`}>
+              {result.sub}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Bet controls */}
-      <div className="flex items-center justify-center gap-3 mb-4">
-        <span className="text-zinc-500 text-xs tracking-wider uppercase">Bet</span>
+      <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
+        <span className="text-zinc-600 text-[10px] tracking-wider uppercase">Bet</span>
         {[50, 100, 250, 500, 1000].map((amount) => (
           <button
             key={amount}
-            onClick={() => !spinning && setBet(amount)}
-            className={`px-3 py-1.5 text-xs font-bold transition-all ${
+            onClick={() => !isSpinning && setBet(amount)}
+            className={`px-3 py-2 text-xs font-bold transition-all ${
               bet === amount
                 ? 'bg-red-600 text-white'
                 : 'border border-white/10 text-zinc-500 hover:text-white'
@@ -133,24 +211,27 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
         ))}
       </div>
 
-      {/* Spin button */}
       <button
         onClick={spin}
-        disabled={spinning || balance < bet}
-        className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        disabled={isSpinning || balance < bet}
+        className={`w-full py-4 text-sm font-bold tracking-widest uppercase transition-all ${
+          isSpinning
+            ? 'bg-zinc-800 text-zinc-500'
+            : 'bg-red-600 text-white hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)]'
+        } disabled:opacity-30 disabled:cursor-not-allowed`}
       >
-        {spinning ? 'SPINNING...' : 'SPIN'}
+        {isSpinning ? 'spinning fr fr...' : 'SPIN 🎰'}
       </button>
 
       {/* Paytable */}
-      <div className="mt-6 grid grid-cols-4 gap-2 text-center text-xs">
-        {Object.entries(SLOT_PAYOUTS).slice(0, 4).map(([symbol, mult]) => (
-          <div key={symbol} className="border border-white/[0.04] p-2">
-            <span className="text-lg">{symbol}</span>
-            <p className="text-zinc-500 mt-1">×{mult}</p>
+      <div className="mt-6 grid grid-cols-4 gap-1.5 text-center text-xs">
+        {Object.entries(PAYOUTS).map(([symbol, { mult }]) => (
+          <div key={symbol} className="border border-white/[0.04] bg-white/[0.01] py-2">
+            <span className="text-xl">{symbol}</span>
+            <p className="text-zinc-500 text-[10px] mt-0.5">{mult}x</p>
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }

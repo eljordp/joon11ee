@@ -12,156 +12,182 @@ interface Props {
   onLose: (amount: number) => void;
 }
 
-const BET_OPTIONS: { type: BetType; label: string; payout: number; color: string }[] = [
-  { type: 'red', label: 'Red', payout: 2, color: 'bg-red-600' },
-  { type: 'black', label: 'Black', payout: 2, color: 'bg-zinc-800' },
-  { type: 'green', label: '0', payout: 14, color: 'bg-green-600' },
-  { type: 'odd', label: 'Odd', payout: 2, color: 'border border-white/20' },
-  { type: 'even', label: 'Even', payout: 2, color: 'border border-white/20' },
-  { type: 'low', label: '1-18', payout: 2, color: 'border border-white/20' },
-  { type: 'high', label: '19-36', payout: 2, color: 'border border-white/20' },
+const BETS: { type: BetType; label: string; payout: number; emoji: string; bg: string }[] = [
+  { type: 'red', label: 'Red', payout: 2, emoji: '🔴', bg: 'bg-red-600 hover:bg-red-500' },
+  { type: 'black', label: 'Black', payout: 2, emoji: '⚫', bg: 'bg-zinc-800 hover:bg-zinc-700 border border-white/10' },
+  { type: 'green', label: '0', payout: 14, emoji: '💚', bg: 'bg-green-600 hover:bg-green-500' },
+  { type: 'odd', label: 'Odd', payout: 2, emoji: '🤪', bg: 'border border-white/10 hover:bg-white/5' },
+  { type: 'even', label: 'Even', payout: 2, emoji: '😌', bg: 'border border-white/10 hover:bg-white/5' },
+  { type: 'low', label: '1-18', payout: 2, emoji: '⬇️', bg: 'border border-white/10 hover:bg-white/5' },
+  { type: 'high', label: '19-36', payout: 2, emoji: '⬆️', bg: 'border border-white/10 hover:bg-white/5' },
 ];
+
+type HistoryEntry = { num: number; color: string };
 
 export default function Roulette({ balance, onWin, onLose }: Props) {
   const [spinning, setSpinning] = useState(false);
   const [bet, setBet] = useState(100);
   const [betType, setBetType] = useState<BetType>('red');
-  const [landedNumber, setLandedNumber] = useState<typeof ROULETTE_NUMBERS[0] | null>(null);
-  const [result, setResult] = useState<{ text: string; win: boolean } | null>(null);
-  const [rotation, setRotation] = useState(0);
+  const [result, setResult] = useState<{ text: string; sub: string; win: boolean } | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [ballPosition, setBallPosition] = useState(0);
+  const [landedNumber, setLandedNumber] = useState<HistoryEntry | null>(null);
 
   const spin = useCallback(() => {
     if (spinning || balance < bet) return;
     setResult(null);
+    setLandedNumber(null);
     setSpinning(true);
 
     const winnerIndex = Math.floor(Math.random() * ROULETTE_NUMBERS.length);
     const winner = ROULETTE_NUMBERS[winnerIndex];
 
-    // Spin animation
-    const spins = 3 + Math.random() * 2;
-    const targetRotation = rotation + spins * 360 + (winnerIndex / ROULETTE_NUMBERS.length) * 360;
-    setRotation(targetRotation);
+    // Animate ball bouncing through numbers
+    let pos = 0;
+    const totalSteps = 30 + Math.floor(Math.random() * 20);
+    let speed = 40;
 
-    setTimeout(() => {
-      setLandedNumber(winner);
+    const animate = () => {
+      pos++;
+      setBallPosition(pos % ROULETTE_NUMBERS.length);
 
-      // Check win
-      let won = false;
-      if (betType === 'red' && winner.color === 'red') won = true;
-      if (betType === 'black' && winner.color === 'black') won = true;
-      if (betType === 'green' && winner.num === 0) won = true;
-      if (betType === 'odd' && winner.num > 0 && winner.num % 2 === 1) won = true;
-      if (betType === 'even' && winner.num > 0 && winner.num % 2 === 0) won = true;
-      if (betType === 'low' && winner.num >= 1 && winner.num <= 18) won = true;
-      if (betType === 'high' && winner.num >= 19 && winner.num <= 36) won = true;
+      if (pos >= totalSteps) {
+        // Land on winner
+        setBallPosition(winnerIndex);
+        setLandedNumber({ num: winner.num, color: winner.color });
+        setHistory((h) => [{ num: winner.num, color: winner.color }, ...h.slice(0, 19)]);
 
-      const option = BET_OPTIONS.find((o) => o.type === betType)!;
+        // Check win
+        let won = false;
+        if (betType === 'red' && winner.color === 'red') won = true;
+        if (betType === 'black' && winner.color === 'black') won = true;
+        if (betType === 'green' && winner.num === 0) won = true;
+        if (betType === 'odd' && winner.num > 0 && winner.num % 2 === 1) won = true;
+        if (betType === 'even' && winner.num > 0 && winner.num % 2 === 0) won = true;
+        if (betType === 'low' && winner.num >= 1 && winner.num <= 18) won = true;
+        if (betType === 'high' && winner.num >= 19 && winner.num <= 36) won = true;
 
-      if (won) {
-        const winAmount = bet * option.payout;
-        onWin(winAmount);
-        setResult({ text: `WIN! +$${winAmount.toLocaleString()}`, win: true });
-      } else {
-        onLose(bet);
-        setResult({ text: `-$${bet.toLocaleString()}`, win: false });
+        const option = BETS.find((o) => o.type === betType)!;
+
+        if (won) {
+          const winAmount = bet * option.payout;
+          onWin(winAmount);
+          setResult({
+            text: `+$${winAmount.toLocaleString()}`,
+            sub: betType === 'green' ? 'GREEN HIT 14x 🤑' : `${option.label} wins ${option.emoji}`,
+            win: true,
+          });
+        } else {
+          onLose(bet);
+          setResult({
+            text: `-$${bet.toLocaleString()}`,
+            sub: winner.color === 'green' ? 'green said nah 💀' : 'L + ratio',
+            win: false,
+          });
+        }
+        setSpinning(false);
+        return;
       }
-      setSpinning(false);
-    }, 3000);
-  }, [spinning, balance, bet, betType, rotation, onWin, onLose]);
+
+      // Slow down near end
+      if (pos > totalSteps - 10) {
+        speed += 30;
+      }
+      setTimeout(animate, speed);
+    };
+
+    animate();
+  }, [spinning, balance, bet, betType, onWin, onLose]);
+
+  const currentNum = ROULETTE_NUMBERS[ballPosition];
 
   return (
-    <div className="border border-white/[0.06] p-6 sm:p-8">
-      <h3 className="text-xl font-bold text-white mb-6 text-center">Roulette</h3>
+    <div className="border border-white/[0.06] bg-zinc-950/50 p-6 sm:p-8 relative overflow-hidden">
+      {result?.win && <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />}
 
-      {/* Wheel visual */}
-      <div className="relative w-48 h-48 mx-auto mb-6">
-        {/* Pointer */}
-        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[16px] border-l-transparent border-r-transparent border-t-red-600" />
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-white">Roulette</h3>
+        {history.length > 0 && (
+          <span className="text-zinc-600 text-xs">{history.length} spins</span>
+        )}
+      </div>
 
+      {/* Number display - big animated ball */}
+      <div className="flex items-center justify-center mb-6">
         <motion.div
-          animate={{ rotate: rotation }}
-          transition={{ duration: 3, ease: [0.15, 0.85, 0.35, 1] }}
-          className="w-full h-full rounded-full border-2 border-white/20 relative overflow-hidden"
+          key={ballPosition}
+          initial={spinning ? { scale: 0.8, opacity: 0.5 } : { scale: 1.3 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: spinning ? 0.05 : 0.4, ease: spinning ? 'linear' : [0.2, 0.8, 0.2, 1.2] }}
+          className={`w-28 h-28 sm:w-36 sm:h-36 flex items-center justify-center text-4xl sm:text-5xl font-black text-white ${
+            currentNum?.color === 'red' ? 'bg-red-600' : currentNum?.color === 'green' ? 'bg-green-600' : 'bg-zinc-800 border-2 border-white/20'
+          } ${spinning ? '' : 'shadow-[0_0_40px_rgba(220,38,38,0.2)]'}`}
         >
-          {ROULETTE_NUMBERS.map((n, i) => {
-            const angle = (i / ROULETTE_NUMBERS.length) * 360;
-            const bg = n.color === 'red' ? '#DC2626' : n.color === 'black' ? '#18181b' : '#16a34a';
-            return (
-              <div
-                key={n.num}
-                className="absolute top-0 left-1/2 h-1/2 origin-bottom"
-                style={{
-                  transform: `rotate(${angle}deg) translateX(-50%)`,
-                  width: `${(1 / ROULETTE_NUMBERS.length) * 100 * 3.14}%`,
-                }}
-              >
-                <div className="w-full h-full" style={{ backgroundColor: bg }}>
-                  <span className="text-white text-[6px] font-bold block text-center pt-1">
-                    {n.num}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+          {spinning ? currentNum?.num ?? 0 : landedNumber ? landedNumber.num : '?'}
         </motion.div>
       </div>
 
-      {/* Landed number */}
-      <AnimatePresence>
-        {landedNumber && !spinning && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center mb-4"
-          >
-            <span className={`inline-flex items-center justify-center w-12 h-12 text-lg font-bold text-white ${
-              landedNumber.color === 'red' ? 'bg-red-600' : landedNumber.color === 'green' ? 'bg-green-600' : 'bg-zinc-800 border border-white/20'
-            }`}>
-              {landedNumber.num}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* History trail */}
+      {history.length > 0 && (
+        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-2 scrollbar-thin">
+          {history.map((h, i) => (
+            <motion.div
+              key={`${h.num}-${i}`}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: i === 0 ? 1 : 0.5 + (1 - i / history.length) * 0.5 }}
+              className={`w-8 h-8 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white ${
+                h.color === 'red' ? 'bg-red-600' : h.color === 'green' ? 'bg-green-600' : 'bg-zinc-800 border border-white/10'
+              }`}
+            >
+              {h.num}
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Result */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {result && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`text-center mb-4 text-lg font-bold ${result.win ? 'text-green-400' : 'text-red-400'}`}
+            className="text-center mb-6"
           >
-            {result.text}
+            <p className={`text-2xl sm:text-3xl font-black ${result.win ? 'text-green-400' : 'text-red-400'}`}>
+              {result.text}
+            </p>
+            <p className={`text-xs mt-1 ${result.win ? 'text-green-500/70' : 'text-zinc-600'}`}>
+              {result.sub}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bet type */}
+      {/* Bet type selector */}
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4">
-        {BET_OPTIONS.map((option) => (
+        {BETS.map((option) => (
           <button
             key={option.type}
             onClick={() => !spinning && setBetType(option.type)}
-            className={`px-2 py-2 text-xs font-bold transition-all text-center ${option.color} ${
-              betType === option.type ? 'ring-2 ring-white/40 text-white' : 'text-zinc-400 hover:text-white'
+            className={`px-2 py-3 text-xs font-bold transition-all text-center ${option.bg} ${
+              betType === option.type ? 'ring-2 ring-white/50 text-white scale-105' : 'text-zinc-300'
             }`}
           >
+            <span className="block text-base mb-0.5">{option.emoji}</span>
             {option.label}
           </button>
         ))}
       </div>
 
       {/* Bet amount */}
-      <div className="flex items-center justify-center gap-3 mb-4">
-        <span className="text-zinc-500 text-xs tracking-wider uppercase">Bet</span>
+      <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
+        <span className="text-zinc-600 text-[10px] tracking-wider uppercase">Bet</span>
         {[50, 100, 250, 500, 1000].map((amount) => (
           <button
             key={amount}
             onClick={() => !spinning && setBet(amount)}
-            className={`px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`px-3 py-2 text-xs font-bold transition-all ${
               bet === amount
                 ? 'bg-red-600 text-white'
                 : 'border border-white/10 text-zinc-500 hover:text-white'
@@ -172,13 +198,16 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
         ))}
       </div>
 
-      {/* Spin */}
       <button
         onClick={spin}
         disabled={spinning || balance < bet}
-        className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        className={`w-full py-4 text-sm font-bold tracking-widest uppercase transition-all ${
+          spinning
+            ? 'bg-zinc-800 text-zinc-500'
+            : 'bg-red-600 text-white hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)]'
+        } disabled:opacity-30 disabled:cursor-not-allowed`}
       >
-        {spinning ? 'SPINNING...' : 'PLACE BET'}
+        {spinning ? 'ball is rolling...' : 'SPIN 🎯'}
       </button>
     </div>
   );
