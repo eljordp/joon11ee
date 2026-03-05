@@ -12,15 +12,21 @@ import CrossyRoad from '@/components/casino/CrossyRoad';
 import AuthModal from '@/components/auth/AuthModal';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 
-type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy';
+const MultiplayerCrash = dynamic(() => import('@/components/casino/MultiplayerCrash'), { ssr: false });
+const MultiplayerBlackjack = dynamic(() => import('@/components/casino/MultiplayerBlackjack'), { ssr: false });
 
-const GAMES: { id: Game; name: string; emoji: string; desc: string }[] = [
+type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack';
+
+const GAMES: { id: Game; name: string; emoji: string; desc: string; live?: boolean }[] = [
   { id: 'slots', name: 'Slots', emoji: '🎰', desc: 'Match 3 and go crazy' },
   { id: 'roulette', name: 'Roulette', emoji: '🎯', desc: 'Pick a side' },
   { id: 'blackjack', name: 'Blackjack', emoji: '🃏', desc: 'Beat the dealer' },
   { id: 'crash', name: 'Crash', emoji: '🚀', desc: 'Cash out before boom' },
   { id: 'crossy', name: 'Crossy', emoji: '🐔', desc: 'Cross the road alive' },
+  { id: 'mp_crash', name: 'Crash MP', emoji: '🚀', desc: 'Multiplayer crash', live: true },
+  { id: 'mp_blackjack', name: 'Table BJ', emoji: '🃏', desc: '5-seat table', live: true },
 ];
 
 export default function CasinoPage() {
@@ -183,17 +189,24 @@ export default function CasinoPage() {
         </div>
 
         {/* Game selector */}
-        <div className="flex sm:grid sm:grid-cols-5 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
+        <div className="flex sm:grid sm:grid-cols-7 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
           {GAMES.map((game) => (
             <button
               key={game.id}
               onClick={() => setActiveGame(game.id)}
-              className={`flex-shrink-0 w-[72px] sm:w-auto p-2.5 sm:p-5 text-center transition-all duration-300 ${
+              className={`flex-shrink-0 w-[72px] sm:w-auto p-2.5 sm:p-5 text-center transition-all duration-300 relative ${
                 activeGame === game.id
-                  ? 'bg-red-600/10 border-2 border-red-600/40 scale-[1.02]'
+                  ? game.live
+                    ? 'bg-green-600/10 border-2 border-green-600/40 scale-[1.02]'
+                    : 'bg-red-600/10 border-2 border-red-600/40 scale-[1.02]'
                   : 'border border-white/[0.06] hover:border-white/[0.12]'
               }`}
             >
+              {game.live && (
+                <span className="absolute top-1 right-1 text-[8px] font-bold px-1 py-0.5 bg-green-500/20 text-green-400 border border-green-500/20 tracking-wider uppercase leading-none">
+                  Live
+                </span>
+              )}
               <span className="text-xl sm:text-3xl block mb-0.5 sm:mb-1">{game.emoji}</span>
               <p className={`font-bold text-[11px] sm:text-sm ${activeGame === game.id ? 'text-white' : 'text-zinc-500'}`}>
                 {game.name}
@@ -226,6 +239,12 @@ export default function CasinoPage() {
             )}
             {activeGame === 'crossy' && (
               <CrossyRoad balance={balance} onWin={handleWin} onLose={handleLose} />
+            )}
+            {activeGame === 'mp_crash' && (
+              <MultiplayerCrash balance={balance} onWin={handleWin} onLose={handleLose} />
+            )}
+            {activeGame === 'mp_blackjack' && (
+              <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} />
             )}
           </motion.div>
         </AnimatePresence>

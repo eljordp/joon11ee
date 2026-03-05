@@ -122,4 +122,26 @@ export const sounds = {
     playTone(400, 0.2, 'sawtooth', 0.04, 0.1);
     playTone(600, 0.15, 'sawtooth', 0.03, 0.2);
   },
+
+  // Countdown tick
+  countdown() {
+    playTone(1200, 0.06, 'sine', 0.1);
+  },
+
+  // Urgent countdown (last 3 seconds)
+  countdownFinal() {
+    playTone(1600, 0.08, 'square', 0.12);
+    playTone(800, 0.04, 'sine', 0.08, 0.05);
+  },
+
+  // Another player cashed out
+  playerCashout() {
+    playTone(900, 0.06, 'triangle', 0.06);
+  },
+
+  // Your turn notification
+  turnStart() {
+    playTone(880, 0.1, 'sine', 0.12);
+    playTone(1100, 0.1, 'sine', 0.1, 0.1);
+  },
 };
