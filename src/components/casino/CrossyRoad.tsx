@@ -303,13 +303,13 @@ export default function CrossyRoad({ balance, onWin, onLose }: Props) {
       {gameState === 'playing' && (
         <div className="space-y-3">
           {/* D-pad */}
-          <div className="grid grid-cols-3 gap-1.5 max-w-[180px] mx-auto">
+          <div className="grid grid-cols-3 gap-1.5 max-w-[200px] sm:max-w-[180px] mx-auto">
             <div />
-            <button onClick={() => move('up')} className="bg-white/10 text-white py-3 text-lg font-bold hover:bg-white/15 transition-all flex items-center justify-center">↑</button>
+            <button onClick={() => move('up')} className="bg-white/10 text-white py-4 sm:py-3 text-xl sm:text-lg font-bold hover:bg-white/15 active:bg-white/25 transition-all flex items-center justify-center min-h-[48px]">↑</button>
             <div />
-            <button onClick={() => move('left')} className="bg-white/10 text-white py-3 text-lg font-bold hover:bg-white/15 transition-all flex items-center justify-center">←</button>
-            <button onClick={() => move('down')} className="bg-white/10 text-white py-3 text-lg font-bold hover:bg-white/15 transition-all flex items-center justify-center">↓</button>
-            <button onClick={() => move('right')} className="bg-white/10 text-white py-3 text-lg font-bold hover:bg-white/15 transition-all flex items-center justify-center">→</button>
+            <button onClick={() => move('left')} className="bg-white/10 text-white py-4 sm:py-3 text-xl sm:text-lg font-bold hover:bg-white/15 active:bg-white/25 transition-all flex items-center justify-center min-h-[48px]">←</button>
+            <button onClick={() => move('down')} className="bg-white/10 text-white py-4 sm:py-3 text-xl sm:text-lg font-bold hover:bg-white/15 active:bg-white/25 transition-all flex items-center justify-center min-h-[48px]">↓</button>
+            <button onClick={() => move('right')} className="bg-white/10 text-white py-4 sm:py-3 text-xl sm:text-lg font-bold hover:bg-white/15 active:bg-white/25 transition-all flex items-center justify-center min-h-[48px]">→</button>
           </div>
 
           <button
@@ -320,7 +320,7 @@ export default function CrossyRoad({ balance, onWin, onLose }: Props) {
             CASH OUT ${Math.floor(bet * multiplier).toLocaleString()} 💰
           </button>
 
-          <p className="text-zinc-700 text-[10px] text-center">arrows / WASD to move &middot; space to cash out</p>
+          <p className="text-zinc-700 text-[10px] text-center hidden sm:block">arrows / WASD to move &middot; space to cash out</p>
         </div>
       )}
 

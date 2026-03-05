@@ -94,30 +94,30 @@ export default function CasinoPage() {
       <div className="relative z-10 mx-auto max-w-6xl px-6">
         {/* Header */}
         <RevealOnScroll>
-          <div className="text-center mb-10">
-            <span className="text-red-600 text-xs tracking-[0.3em] uppercase font-semibold mb-4 block">
+          <div className="text-center mb-6 sm:mb-10">
+            <span className="text-red-600 text-[10px] sm:text-xs tracking-[0.3em] uppercase font-semibold mb-2 sm:mb-4 block">
               High Roller Lounge
             </span>
-            <h1 className="text-4xl md:text-6xl font-black text-white mb-3">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl font-black text-white mb-2 sm:mb-3">
               CRYPTO <span className="text-red-600">CASINO</span>
             </h1>
-            <p className="text-zinc-500 max-w-md mx-auto text-sm">
+            <p className="text-zinc-500 max-w-md mx-auto text-xs sm:text-sm">
               $10K free chips. no real money. just vibes and W&apos;s.
             </p>
           </div>
         </RevealOnScroll>
 
         {/* Balance bar */}
-        <div className="sticky top-20 z-30 mb-8">
-          <div className="bg-black/95 backdrop-blur-md border border-white/[0.06] px-4 sm:px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <div className="sticky top-16 sm:top-20 z-30 mb-6 sm:mb-8">
+          <div className="bg-black/95 backdrop-blur-md border border-white/[0.06] px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 min-w-0">
               <div>
-                <span className="text-zinc-600 text-[10px] tracking-wider uppercase block">Balance</span>
+                <span className="text-zinc-600 text-[9px] sm:text-[10px] tracking-wider uppercase block">Balance</span>
                 <motion.span
                   key={balance}
                   initial={{ scale: 1.15 }}
                   animate={{ scale: 1 }}
-                  className={`text-xl sm:text-2xl font-black font-mono block ${
+                  className={`text-lg sm:text-2xl font-black font-mono block ${
                     flash === 'win' ? 'text-green-400' : flash === 'lose' ? 'text-red-400' : 'text-white'
                   }`}
                 >
@@ -125,17 +125,17 @@ export default function CasinoPage() {
                 </motion.span>
               </div>
               {totalSession !== 0 && (
-                <span className={`text-xs font-mono font-bold hidden sm:block ${totalSession > 0 ? 'text-green-500/60' : 'text-red-500/60'}`}>
+                <span className={`text-[10px] sm:text-xs font-mono font-bold hidden sm:block ${totalSession > 0 ? 'text-green-500/60' : 'text-red-500/60'}`}>
                   {totalSession > 0 ? '+' : ''}{totalSession.toLocaleString()} session
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               {!user && (
                 <button
                   onClick={() => setAuthOpen(true)}
-                  className="px-3 py-2 border border-red-600/30 bg-red-600/10 text-red-400 text-xs font-bold tracking-wider uppercase hover:bg-red-600/20 transition-all"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-red-600/30 bg-red-600/10 text-red-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase hover:bg-red-600/20 transition-all"
                 >
                   Sign In
                 </button>
@@ -143,7 +143,7 @@ export default function CasinoPage() {
               {user && (
                 <Link
                   href="/profile"
-                  className="px-3 py-2 border border-white/10 text-zinc-400 text-xs font-bold tracking-wider uppercase hover:text-white transition-all"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-white/10 text-zinc-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase hover:text-white transition-all"
                 >
                   Stats
                 </Link>
@@ -151,14 +151,14 @@ export default function CasinoPage() {
               {balance < 50 && (
                 <button
                   onClick={handleReset}
-                  className="px-3 py-2 bg-red-600 text-white text-xs font-bold tracking-wider uppercase hover:bg-red-500 transition-all animate-pulse"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-red-600 text-white text-[10px] sm:text-xs font-bold tracking-wider uppercase hover:bg-red-500 transition-all animate-pulse"
                 >
                   Reload
                 </button>
               )}
               <button
                 onClick={handleReset}
-                className="px-3 py-2 border border-white/10 text-zinc-600 text-xs tracking-wider uppercase hover:text-white transition-all"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 border border-white/10 text-zinc-600 text-[10px] sm:text-xs tracking-wider uppercase hover:text-white transition-all"
               >
                 Reset
               </button>
@@ -167,19 +167,19 @@ export default function CasinoPage() {
         </div>
 
         {/* Game selector */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-8">
+        <div className="flex sm:grid sm:grid-cols-5 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
           {GAMES.map((game) => (
             <button
               key={game.id}
               onClick={() => setActiveGame(game.id)}
-              className={`p-3 sm:p-5 text-center transition-all duration-300 ${
+              className={`flex-shrink-0 w-[72px] sm:w-auto p-2.5 sm:p-5 text-center transition-all duration-300 ${
                 activeGame === game.id
                   ? 'bg-red-600/10 border-2 border-red-600/40 scale-[1.02]'
                   : 'border border-white/[0.06] hover:border-white/[0.12]'
               }`}
             >
-              <span className="text-2xl sm:text-3xl block mb-1">{game.emoji}</span>
-              <p className={`font-bold text-sm ${activeGame === game.id ? 'text-white' : 'text-zinc-500'}`}>
+              <span className="text-xl sm:text-3xl block mb-0.5 sm:mb-1">{game.emoji}</span>
+              <p className={`font-bold text-[11px] sm:text-sm ${activeGame === game.id ? 'text-white' : 'text-zinc-500'}`}>
                 {game.name}
               </p>
               <p className="text-zinc-700 text-[10px] mt-0.5 hidden sm:block">{game.desc}</p>

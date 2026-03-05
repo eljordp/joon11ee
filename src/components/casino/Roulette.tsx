@@ -178,16 +178,16 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
       </AnimatePresence>
 
       {/* Bet type selector */}
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-4">
+      <div className="flex sm:grid sm:grid-cols-7 gap-1.5 sm:gap-2 mb-4 overflow-x-auto pb-1 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
         {BETS.map((option) => (
           <button
             key={option.type}
             onClick={() => { if (!spinning) { sounds.click(); setBetType(option.type); } }}
-            className={`px-2 py-3 text-xs font-bold transition-all text-center ${option.bg} ${
+            className={`flex-shrink-0 px-2.5 sm:px-2 py-2.5 sm:py-3 text-[11px] sm:text-xs font-bold transition-all text-center ${option.bg} ${
               betType === option.type ? 'ring-2 ring-white/50 text-white scale-105' : 'text-zinc-300'
             }`}
           >
-            <span className="block text-base mb-0.5">{option.emoji}</span>
+            <span className="block text-sm sm:text-base mb-0.5">{option.emoji}</span>
             {option.label}
           </button>
         ))}

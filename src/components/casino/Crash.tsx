@@ -11,7 +11,7 @@ interface Props {
   onLose: (amount: number) => void;
 }
 
-type GameState = 'betting' | 'flying' | 'crashed' | 'cashed';
+type GameState = 'betting' | 'flying' | 'crashed' | 'cashed' | 'coasting';
 
 export default function Crash({ balance, onWin, onLose }: Props) {
   const [bet, setBet] = useState(100);
@@ -23,6 +23,8 @@ export default function Crash({ balance, onWin, onLose }: Props) {
   const [trail, setTrail] = useState<number[]>([]);
   const animRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const startTime = useRef(0);
+  const cashedAt = useRef(0);
+  const crashRef = useRef(0);
 
   useEffect(() => {
     return () => { if (animRef.current) clearInterval(animRef.current); };
@@ -39,6 +41,8 @@ export default function Crash({ balance, onWin, onLose }: Props) {
     const crash = Math.max(1.0, 1 / (1 - r) * 0.97);
     const cappedCrash = Math.min(crash, 100);
     setCrashPoint(cappedCrash);
+    crashRef.current = cappedCrash;
+    cashedAt.current = 0;
     setMultiplier(1.0);
     setTrail([]);
     setResult(null);
@@ -52,14 +56,26 @@ export default function Crash({ balance, onWin, onLose }: Props) {
       if (currentMult >= cappedCrash) {
         clearInterval(animRef.current);
         setMultiplier(cappedCrash);
-        setGameState('crashed');
-        sounds.lose();
-        onLose(bet);
-        setHistory((h) => [{ mult: parseFloat(cappedCrash.toFixed(2)), cashed: false }, ...h.slice(0, 19)]);
-        setResult({
-          text: `-$${bet.toLocaleString()}`,
-          sub: `CRASHED at ${cappedCrash.toFixed(2)}x 💥`,
-          win: false,
+        setGameState((prev) => {
+          if (prev === 'coasting') {
+            // Player already cashed out - just show crash
+            setHistory((h) => [{ mult: parseFloat(cappedCrash.toFixed(2)), cashed: true }, ...h.slice(0, 19)]);
+            setResult((r) => r ? {
+              ...r,
+              sub: `cashed ${cashedAt.current.toFixed(2)}x → crashed ${cappedCrash.toFixed(2)}x 🤑`,
+            } : r);
+            return 'cashed';
+          }
+          // Player didn't cash out
+          sounds.lose();
+          onLose(bet);
+          setHistory((h) => [{ mult: parseFloat(cappedCrash.toFixed(2)), cashed: false }, ...h.slice(0, 19)]);
+          setResult({
+            text: `-$${bet.toLocaleString()}`,
+            sub: `CRASHED at ${cappedCrash.toFixed(2)}x 💥`,
+            win: false,
+          });
+          return 'crashed';
         });
       } else {
         setMultiplier(currentMult);
@@ -71,15 +87,15 @@ export default function Crash({ balance, onWin, onLose }: Props) {
 
   const cashOut = useCallback(() => {
     if (gameState !== 'flying') return;
-    clearInterval(animRef.current);
+    // Don't clear interval - let the rocket keep flying to show crash point
     sounds.win();
     const winAmount = Math.floor(bet * multiplier);
+    cashedAt.current = multiplier;
     onWin(winAmount);
-    setGameState('cashed');
-    setHistory((h) => [{ mult: parseFloat(multiplier.toFixed(2)), cashed: true }, ...h.slice(0, 19)]);
+    setGameState('coasting');
     setResult({
       text: `+$${winAmount.toLocaleString()}`,
-      sub: `cashed at ${multiplier.toFixed(2)}x 🤑`,
+      sub: `cashed at ${multiplier.toFixed(2)}x — waiting for crash...`,
       win: true,
     });
     if (multiplier >= 5) sounds.jackpot();
@@ -94,7 +110,8 @@ export default function Crash({ balance, onWin, onLose }: Props) {
   };
 
   // Calculate rocket position for visual
-  const rocketY = gameState === 'flying' ? Math.min(85, (multiplier - 1) * 15) : 0;
+  const isLive = gameState === 'flying' || gameState === 'coasting';
+  const rocketY = isLive ? Math.min(85, (multiplier - 1) * 15) : 0;
 
   return (
     <div className="border border-white/[0.06] bg-zinc-950/50 p-6 sm:p-8 relative overflow-hidden">
@@ -133,7 +150,7 @@ export default function Crash({ balance, onWin, onLose }: Props) {
           <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
             <polyline
               fill="none"
-              stroke={gameState === 'crashed' ? '#ef4444' : '#22c55e'}
+              stroke={gameState === 'crashed' ? '#ef4444' : gameState === 'coasting' ? '#facc15' : '#22c55e'}
               strokeWidth="2"
               strokeOpacity="0.5"
               points={trail.map((m, i) => {
@@ -154,7 +171,7 @@ export default function Crash({ balance, onWin, onLose }: Props) {
           transition={gameState === 'crashed' ? { duration: 0.3 } : { duration: 0.1 }}
           className="absolute left-1/2 -translate-x-1/2 text-3xl sm:text-4xl"
         >
-          {gameState === 'crashed' ? '💥' : '🚀'}
+          {gameState === 'crashed' ? '💥' : gameState === 'coasting' ? '👻' : '🚀'}
         </motion.div>
 
         {/* Multiplier overlay */}
@@ -171,7 +188,7 @@ export default function Crash({ balance, onWin, onLose }: Props) {
           </motion.span>
         </div>
 
-        {/* Crashed label */}
+        {/* Status labels */}
         {gameState === 'crashed' && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -179,6 +196,15 @@ export default function Crash({ balance, onWin, onLose }: Props) {
             className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-1 text-xs font-bold tracking-widest uppercase"
           >
             CRASHED
+          </motion.div>
+        )}
+        {gameState === 'coasting' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-600 text-white px-4 py-1 text-xs font-bold tracking-widest uppercase"
+          >
+            CASHED @ {cashedAt.current.toFixed(2)}x
           </motion.div>
         )}
       </div>
@@ -225,6 +251,12 @@ export default function Crash({ balance, onWin, onLose }: Props) {
         >
           CASH OUT ${Math.floor(bet * multiplier).toLocaleString()} 💰
         </button>
+      )}
+
+      {gameState === 'coasting' && (
+        <div className="text-center text-yellow-400/60 text-xs font-bold py-4 animate-pulse tracking-wider uppercase">
+          still flying... watching for crash 👀
+        </div>
       )}
 
       {(gameState === 'crashed' || gameState === 'cashed') && (

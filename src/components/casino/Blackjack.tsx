@@ -21,7 +21,7 @@ function PlayingCard({ card, hidden = false, index }: { card: Card; hidden?: boo
       initial={{ opacity: 0, y: -50, rotateZ: -10 }}
       animate={{ opacity: 1, y: 0, rotateZ: 0 }}
       transition={{ delay: index * 0.12, duration: 0.4, type: 'spring', stiffness: 200 }}
-      className={`relative w-20 h-[120px] sm:w-24 sm:h-[140px] rounded-lg flex-shrink-0 ${
+      className={`relative w-16 h-[96px] sm:w-24 sm:h-[140px] rounded-lg flex-shrink-0 ${
         hidden
           ? 'bg-gradient-to-br from-red-900 to-red-950 border-2 border-red-800'
           : 'bg-gradient-to-br from-zinc-800 to-zinc-900 border-2 border-white/15'
@@ -202,11 +202,11 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
       </div>
 
       {/* Table area */}
-      <div className="bg-zinc-900/50 border border-white/[0.04] p-4 sm:p-6 mb-6 min-h-[320px]">
+      <div className="bg-zinc-900/50 border border-white/[0.04] p-3 sm:p-6 mb-4 sm:mb-6 min-h-[260px] sm:min-h-[320px]">
         {/* Dealer */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-zinc-500 text-xs tracking-wider uppercase">Dealer</span>
+        <div className="mb-4 sm:mb-8">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <span className="text-zinc-500 text-[10px] sm:text-xs tracking-wider uppercase">Dealer</span>
             {showDealerCards && dealerHand.length > 0 && (
               <motion.span
                 initial={{ opacity: 0 }}
@@ -217,7 +217,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
               </motion.span>
             )}
           </div>
-          <div className="flex gap-[-10px] sm:gap-3 min-h-[120px] sm:min-h-[140px]">
+          <div className="flex gap-1.5 sm:gap-3 min-h-[96px] sm:min-h-[140px] overflow-x-auto">
             {dealerHand.map((card, i) => (
               <PlayingCard key={`d-${i}-${card.rank}${card.suit}`} card={card} hidden={i === 1 && !showDealerCards} index={i} />
             ))}
@@ -225,12 +225,12 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         </div>
 
         {/* Divider */}
-        <div className="border-t border-dashed border-white/[0.06] mb-8" />
+        <div className="border-t border-dashed border-white/[0.06] mb-4 sm:mb-8" />
 
         {/* Player */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-zinc-500 text-xs tracking-wider uppercase">You</span>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <span className="text-zinc-500 text-[10px] sm:text-xs tracking-wider uppercase">You</span>
             {playerHand.length > 0 && (
               <span className={`text-sm font-mono font-bold ${
                 handValue(playerHand) === 21 ? 'text-green-400' : handValue(playerHand) > 21 ? 'text-red-400' : 'text-white'
@@ -240,7 +240,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
               </span>
             )}
           </div>
-          <div className="flex gap-[-10px] sm:gap-3 min-h-[120px] sm:min-h-[140px]">
+          <div className="flex gap-1.5 sm:gap-3 min-h-[96px] sm:min-h-[140px] overflow-x-auto">
             {playerHand.map((card, i) => (
               <PlayingCard key={`p-${i}-${card.rank}${card.suit}`} card={card} index={i} />
             ))}
