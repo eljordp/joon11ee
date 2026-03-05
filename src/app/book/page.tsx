@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { fleet, cities, getCarsByCity, getCarBySlug, formatPrice, type City, type Car } from '@/data/fleet';
+import { saveBooking, generateBookingId } from '@/lib/bookings';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import ParticleBackground from '@/components/ui/ParticleBackground';
 
@@ -30,6 +31,7 @@ function BookingContent() {
   const preselectedCar = searchParams.get('car');
 
   const [step, setStep] = useState<BookingStep>(preselectedCar ? 2 : 1);
+  const [confirmed, setConfirmed] = useState(false);
   const [booking, setBooking] = useState<BookingData>(() => {
     const car = preselectedCar ? getCarBySlug(preselectedCar) || null : null;
     return {
@@ -277,8 +279,8 @@ function BookingContent() {
                         onChange={(v) => setBooking({ ...booking, customer: { ...booking.customer, driversLicense: v } })}
                       />
                     </div>
-                    {booking.customer.age && parseInt(booking.customer.age) < 25 && (
-                      <p className="text-red-500 text-sm">Must be 25 or older to rent.</p>
+                    {booking.customer.age && parseInt(booking.customer.age) < 18 && (
+                      <p className="text-red-500 text-sm">Must be 18 or older to rent.</p>
                     )}
                     <button
                       onClick={() => setStep(5)}
@@ -288,7 +290,7 @@ function BookingContent() {
                         !booking.customer.email ||
                         !booking.customer.phone ||
                         !booking.customer.age ||
-                        parseInt(booking.customer.age) < 25 ||
+                        parseInt(booking.customer.age) < 18 ||
                         !booking.customer.driversLicense
                       }
                       className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed mt-6"
@@ -301,7 +303,7 @@ function BookingContent() {
               )}
 
               {/* Step 5: Confirmation */}
-              {step === 5 && booking.car && booking.city && (
+              {step === 5 && booking.car && booking.city && !confirmed && (
                 <div className="max-w-lg mx-auto">
                   <h2 className="text-2xl font-bold text-white mb-8 text-center">Review & Confirm</h2>
 
@@ -344,7 +346,30 @@ function BookingContent() {
 
                     <button
                       onClick={() => {
-                        alert('Booking submitted! Stripe payment integration coming soon. We\'ll contact you to confirm.');
+                        const bookingData = {
+                          id: generateBookingId(),
+                          city: booking.city!,
+                          cityFullName: cities[booking.city!].fullName,
+                          carBrand: booking.car!.brand,
+                          carName: booking.car!.name,
+                          carSlug: booking.car!.slug,
+                          carImage: booking.car!.image,
+                          startDate: booking.startDate,
+                          endDate: booking.endDate,
+                          totalDays,
+                          dailyRate: booking.car!.dailyRate,
+                          totalPrice,
+                          customer: booking.customer,
+                          status: 'pending' as const,
+                          createdAt: new Date().toISOString(),
+                        };
+                        saveBooking(bookingData);
+                        fetch('/api/booking', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(bookingData),
+                        }).catch(() => {});
+                        setConfirmed(true);
                       }}
                       className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all animate-pulse-glow"
                       data-hover
@@ -355,6 +380,33 @@ function BookingContent() {
                     <p className="text-zinc-600 text-xs text-center">
                       A hold will be placed on your card. Full payment due at pickup.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Booking confirmed */}
+              {confirmed && (
+                <div className="max-w-lg mx-auto text-center">
+                  <div className="border border-red-600/30 bg-red-600/5 p-8 sm:p-12">
+                    <div className="w-20 h-20 border-2 border-red-600 flex items-center justify-center mx-auto mb-6">
+                      <span className="text-red-600 text-3xl">&#10003;</span>
+                    </div>
+                    <h2 className="text-3xl font-bold text-white mb-3">Booking Confirmed</h2>
+                    <p className="text-zinc-400 mb-8">
+                      We&apos;ll contact you at <span className="text-white">{booking.customer.email}</span> to finalize payment and pickup details.
+                    </p>
+                    <div className="space-y-2 text-sm text-zinc-500 mb-8">
+                      <p>{booking.car?.brand} {booking.car?.name}</p>
+                      <p>{booking.startDate} — {booking.endDate}</p>
+                      <p className="text-red-500 font-bold text-lg">{formatPrice(totalPrice)}</p>
+                    </div>
+                    <a
+                      href="/fleet"
+                      className="inline-block border border-white/20 text-white px-8 py-3 text-xs font-bold tracking-widest uppercase hover:border-white/40 transition-all"
+                      data-hover
+                    >
+                      Browse More Cars
+                    </a>
                   </div>
                 </div>
               )}
