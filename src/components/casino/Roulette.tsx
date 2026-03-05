@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ROULETTE_NUMBERS } from '@/lib/casino';
 import { sounds } from '@/lib/sounds';
+import BetControls from './BetControls';
+import SpeedControl from './SpeedControl';
 
 type BetType = 'red' | 'black' | 'green' | 'odd' | 'even' | 'low' | 'high';
 
@@ -33,6 +35,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [ballPosition, setBallPosition] = useState(0);
   const [landedNumber, setLandedNumber] = useState<HistoryEntry | null>(null);
+  const [gameSpeed, setGameSpeed] = useState(1);
 
   const spin = useCallback(() => {
     if (spinning || balance < bet) return;
@@ -47,8 +50,8 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
 
     // Animate ball bouncing through numbers
     let pos = 0;
-    const totalSteps = 30 + Math.floor(Math.random() * 20);
-    let speed = 40;
+    const totalSteps = Math.floor((30 + Math.floor(Math.random() * 20)) / gameSpeed);
+    let animSpeed = 40 / gameSpeed;
 
     const animate = () => {
       pos++;
@@ -98,13 +101,13 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
 
       // Slow down near end
       if (pos > totalSteps - 10) {
-        speed += 30;
+        animSpeed += 30 / gameSpeed;
       }
-      setTimeout(animate, speed);
+      setTimeout(animate, animSpeed);
     };
 
     animate();
-  }, [spinning, balance, bet, betType, onWin, onLose]);
+  }, [spinning, balance, bet, betType, gameSpeed, onWin, onLose]);
 
   const currentNum = ROULETTE_NUMBERS[ballPosition];
 
@@ -112,11 +115,14 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
     <div className="border border-white/[0.06] bg-zinc-950/50 p-6 sm:p-8 relative overflow-hidden">
       {result?.win && <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <h3 className="text-xl font-bold text-white">Roulette</h3>
-        {history.length > 0 && (
-          <span className="text-zinc-600 text-xs">{history.length} spins</span>
-        )}
+        <div className="flex items-center gap-3">
+          <SpeedControl speed={gameSpeed} setSpeed={setGameSpeed} disabled={spinning} />
+          {history.length > 0 && (
+            <span className="text-zinc-600 text-xs">{history.length} spins</span>
+          )}
+        </div>
       </div>
 
       {/* Number display - big animated ball */}
@@ -188,21 +194,8 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
       </div>
 
       {/* Bet amount */}
-      <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
-        <span className="text-zinc-600 text-[10px] tracking-wider uppercase">Bet</span>
-        {[50, 100, 250, 500, 1000].map((amount) => (
-          <button
-            key={amount}
-            onClick={() => { if (!spinning) { sounds.click(); setBet(amount); } }}
-            className={`px-3 py-2 text-xs font-bold transition-all ${
-              bet === amount
-                ? 'bg-red-600 text-white'
-                : 'border border-white/10 text-zinc-500 hover:text-white'
-            }`}
-          >
-            ${amount}
-          </button>
-        ))}
+      <div className="mb-4">
+        <BetControls balance={balance} bet={bet} setBet={setBet} disabled={spinning} />
       </div>
 
       <button

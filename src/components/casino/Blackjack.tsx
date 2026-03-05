@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createDeck, handValue, isRed, type Card } from '@/lib/casino';
 import { sounds } from '@/lib/sounds';
+import BetControls from './BetControls';
 
 interface Props {
   balance: number;
@@ -271,19 +272,8 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
       {/* Controls */}
       {gameState === 'betting' && (
         <>
-          <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
-            <span className="text-zinc-600 text-[10px] tracking-wider uppercase">Bet</span>
-            {[50, 100, 250, 500, 1000].map((amount) => (
-              <button
-                key={amount}
-                onClick={() => setBet(amount)}
-                className={`px-3 py-2 text-xs font-bold transition-all ${
-                  bet === amount ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
-                }`}
-              >
-                ${amount}
-              </button>
-            ))}
+          <div className="mb-4">
+            <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
           </div>
           <button
             onClick={deal}

@@ -7,16 +7,20 @@ import { getSession, recordCasinoGame, updateCasinoBalance, type UserData } from
 import SlotMachine from '@/components/casino/SlotMachine';
 import Roulette from '@/components/casino/Roulette';
 import Blackjack from '@/components/casino/Blackjack';
+import Crash from '@/components/casino/Crash';
+import CrossyRoad from '@/components/casino/CrossyRoad';
 import AuthModal from '@/components/auth/AuthModal';
 import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import Link from 'next/link';
 
-type Game = 'slots' | 'roulette' | 'blackjack';
+type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy';
 
 const GAMES: { id: Game; name: string; emoji: string; desc: string }[] = [
   { id: 'slots', name: 'Slots', emoji: '🎰', desc: 'Match 3 and go crazy' },
   { id: 'roulette', name: 'Roulette', emoji: '🎯', desc: 'Pick a side' },
   { id: 'blackjack', name: 'Blackjack', emoji: '🃏', desc: 'Beat the dealer' },
+  { id: 'crash', name: 'Crash', emoji: '🚀', desc: 'Cash out before boom' },
+  { id: 'crossy', name: 'Crossy', emoji: '🐔', desc: 'Cross the road alive' },
 ];
 
 export default function CasinoPage() {
@@ -163,7 +167,7 @@ export default function CasinoPage() {
         </div>
 
         {/* Game selector */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-8">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-8">
           {GAMES.map((game) => (
             <button
               key={game.id}
@@ -200,6 +204,12 @@ export default function CasinoPage() {
             )}
             {activeGame === 'blackjack' && (
               <Blackjack balance={balance} onWin={handleWin} onLose={handleLose} />
+            )}
+            {activeGame === 'crash' && (
+              <Crash balance={balance} onWin={handleWin} onLose={handleLose} />
+            )}
+            {activeGame === 'crossy' && (
+              <CrossyRoad balance={balance} onWin={handleWin} onLose={handleLose} />
             )}
           </motion.div>
         </AnimatePresence>

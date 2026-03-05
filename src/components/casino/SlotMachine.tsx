@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sounds } from '@/lib/sounds';
+import BetControls from './BetControls';
+import SpeedControl from './SpeedControl';
 
 const SYMBOLS = ['🏎️', '💎', '🔥', '💰', '⭐', '🍀', '👑', '🎰'];
 const PAYOUTS: Record<string, { mult: number; name: string }> = {
@@ -42,6 +44,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean } | null>(null);
   const [streak, setStreak] = useState(0);
   const [shaking, setShaking] = useState(false);
+  const [speed, setSpeed] = useState(1);
   const intervals = useRef<ReturnType<typeof setInterval>[]>([]);
 
   // Cleanup intervals on unmount
@@ -76,7 +79,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
           next[i] = pos % REEL_SIZE;
           return next;
         });
-      }, 60 + i * 15);
+      }, (60 + i * 15) / speed);
 
       // Stop reel
       setTimeout(() => {
@@ -95,9 +98,9 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
 
         // Last reel stopped
         if (i === 2) {
-          setTimeout(() => checkResult(finalSymbols), 150);
+          setTimeout(() => checkResult(finalSymbols), 150 / speed);
         }
-      }, 800 + i * 400);
+      }, (800 + i * 400) / speed);
     });
   }, [spinning, balance, bet]);
 
@@ -142,18 +145,21 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
         <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <h3 className="text-xl font-bold text-white">Slots</h3>
-        {streak > 1 && (
-          <motion.span
-            key={streak}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="text-xs font-bold px-3 py-1 bg-red-600/20 border border-red-600/30 text-red-400"
-          >
-            {streak} streak 🔥
-          </motion.span>
-        )}
+        <div className="flex items-center gap-3">
+          <SpeedControl speed={speed} setSpeed={setSpeed} disabled={isSpinning} />
+          {streak > 1 && (
+            <motion.span
+              key={streak}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="text-xs font-bold px-3 py-1 bg-red-600/20 border border-red-600/30 text-red-400"
+            >
+              {streak} streak 🔥
+            </motion.span>
+          )}
+        </div>
       </div>
 
       {/* Reels */}
@@ -202,21 +208,8 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       </AnimatePresence>
 
       {/* Bet controls */}
-      <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
-        <span className="text-zinc-600 text-[10px] tracking-wider uppercase">Bet</span>
-        {[50, 100, 250, 500, 1000].map((amount) => (
-          <button
-            key={amount}
-            onClick={() => { if (!isSpinning) { sounds.click(); setBet(amount); } }}
-            className={`px-3 py-2 text-xs font-bold transition-all ${
-              bet === amount
-                ? 'bg-red-600 text-white'
-                : 'border border-white/10 text-zinc-500 hover:text-white'
-            }`}
-          >
-            ${amount}
-          </button>
-        ))}
+      <div className="mb-4">
+        <BetControls balance={balance} bet={bet} setBet={setBet} disabled={isSpinning} />
       </div>
 
       <button
