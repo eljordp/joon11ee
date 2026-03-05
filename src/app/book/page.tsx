@@ -62,11 +62,11 @@ function BookingContent() {
   ];
 
   return (
-    <div className="min-h-screen pt-32 pb-20">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20">
       {/* Header */}
       <section className="relative py-12 overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,150vw)] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
         </div>
         <ParticleBackground count={15} />
 
@@ -83,12 +83,12 @@ function BookingContent() {
           </RevealOnScroll>
 
           {/* Step indicator */}
-          <div className="flex items-center justify-center gap-2 mb-16">
+          <div className="flex items-center justify-center gap-1 sm:gap-2 mb-8 md:mb-16 flex-wrap">
             {steps.map((s, i) => (
               <div key={s.num} className="flex items-center">
                 <button
                   onClick={() => s.num < step && setStep(s.num as BookingStep)}
-                  className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-all duration-300 ${
+                  className={`flex items-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-3 text-xs font-semibold tracking-wider uppercase transition-all duration-300 min-h-[44px] ${
                     step === s.num
                       ? 'bg-red-600 text-white'
                       : step > s.num
@@ -133,7 +133,7 @@ function BookingContent() {
                           setBooking({ ...booking, city, car: null });
                           setStep(2);
                         }}
-                        className={`p-8 border text-left transition-all duration-300 hover:border-red-600/50 hover:bg-red-600/5 ${
+                        className={`p-5 sm:p-8 border text-left transition-all duration-300 hover:border-red-600/50 hover:bg-red-600/5 ${
                           booking.city === city ? 'border-red-600 bg-red-600/10' : 'border-white/[0.08]'
                         }`}
                         data-hover
@@ -235,7 +235,7 @@ function BookingContent() {
                 <div className="max-w-lg mx-auto">
                   <h2 className="text-2xl font-bold text-white mb-8 text-center">Your Details</h2>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <InputField
                         label="First Name"
                         value={booking.customer.firstName}
@@ -259,7 +259,7 @@ function BookingContent() {
                       value={booking.customer.phone}
                       onChange={(v) => setBooking({ ...booking, customer: { ...booking.customer, phone: v } })}
                     />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <InputField
                         label="Age"
                         type="number"
@@ -300,7 +300,7 @@ function BookingContent() {
                 <div className="max-w-lg mx-auto">
                   <h2 className="text-2xl font-bold text-white mb-8 text-center">Review & Confirm</h2>
 
-                  <div className="border border-white/[0.08] p-8 space-y-6">
+                  <div className="border border-white/[0.08] p-4 sm:p-8 space-y-6">
                     {/* Car summary */}
                     <div className="flex items-center gap-4 pb-6 border-b border-white/[0.06]">
                       <div className="w-20 h-14 overflow-hidden flex-shrink-0" style={{ background: booking.car.gradient }} />

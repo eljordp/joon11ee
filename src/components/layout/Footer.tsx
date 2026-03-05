@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="bg-black border-t border-white/[0.06]">
       {/* CTA Banner */}
       <div className="border-b border-white/[0.06]">
-        <div className="mx-auto max-w-7xl px-6 py-20 flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="mx-auto max-w-7xl px-6 py-12 md:py-20 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8 text-center md:text-left">
           <div>
             <h3 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
               Ready to drive?
@@ -26,7 +26,7 @@ export default function Footer() {
 
       {/* Footer Grid */}
       <div className="mx-auto max-w-7xl px-6 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
           {/* Brand */}
           <div className="md:col-span-1">
             <div className="flex items-center gap-3 mb-4">

@@ -12,7 +12,7 @@ export default function CitySelector() {
   const cityCars = getCarsByCity(activeCity);
 
   return (
-    <section className="relative py-32 overflow-hidden">
+    <section className="relative py-16 md:py-32 overflow-hidden">
       {/* Background accent */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-600/5 rounded-full blur-[150px]" />
 
@@ -24,19 +24,19 @@ export default function CitySelector() {
               Our Locations
             </span>
           </div>
-          <h2 className="text-section-title text-white mb-16">
+          <h2 className="text-section-title text-white mb-8 md:mb-16">
             Three Cities.<br />
             <span className="text-zinc-500">Endless Possibilities.</span>
           </h2>
         </RevealOnScroll>
 
         {/* City tabs */}
-        <div className="flex gap-2 mb-16">
+        <div className="flex gap-1 sm:gap-2 mb-8 md:mb-16">
           {(Object.keys(cities) as City[]).map((city) => (
             <button
               key={city}
               onClick={() => setActiveCity(city)}
-              className={`relative px-8 py-4 text-sm font-bold tracking-widest uppercase transition-all duration-300 ${
+              className={`relative px-4 py-3 sm:px-8 sm:py-4 text-xs sm:text-sm font-bold tracking-wider sm:tracking-widest uppercase transition-all duration-300 ${
                 activeCity === city
                   ? 'text-white'
                   : 'text-zinc-600 hover:text-zinc-400'
@@ -67,7 +67,7 @@ export default function CitySelector() {
           >
             {/* City info */}
             <div className="flex flex-col justify-center">
-              <h3 className="text-4xl font-bold text-white mb-4">{cityData.fullName}</h3>
+              <h3 className="text-2xl sm:text-4xl font-bold text-white mb-4">{cityData.fullName}</h3>
               <p className="text-xl text-red-500 mb-6">{cityData.tagline}</p>
               <p className="text-zinc-400 mb-4 leading-relaxed">
                 {cityCars.length} exotic vehicles available for rent. From supercars to luxury SUVs, experience the finest automobiles in {cityData.fullName}.
@@ -86,7 +86,7 @@ export default function CitySelector() {
             </div>
 
             {/* Car preview grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
               {cityCars.slice(0, 4).map((car, i) => (
                 <motion.div
                   key={car.id}
@@ -101,7 +101,7 @@ export default function CitySelector() {
                     style={{ background: car.gradient }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4">
                     <p className="text-zinc-500 text-xs uppercase tracking-wider">{car.brand}</p>
                     <p className="text-white font-bold">{car.name}</p>
                     <p className="text-red-500 text-sm font-semibold mt-1">${car.dailyRate}/day</p>

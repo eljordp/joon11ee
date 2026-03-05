@@ -9,7 +9,7 @@ export default function FeaturedFleet() {
   const featured = getFeaturedCars();
 
   return (
-    <section className="relative py-32 bg-black">
+    <section className="relative py-16 md:py-32 bg-black">
       {/* Section divider */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
 

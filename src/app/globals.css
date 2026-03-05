@@ -13,9 +13,11 @@
   --font-sans: var(--font-inter);
 }
 
-/* Base */
-* {
-  cursor: none;
+/* Base - hide cursor only on desktop */
+@media (min-width: 768px) {
+  * {
+    cursor: none;
+  }
 }
 
 html {

@@ -26,8 +26,8 @@ export default function Navbar() {
       <nav
         className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ${
           scrolled
-            ? 'glass-strong py-3'
-            : 'bg-transparent py-6'
+            ? 'glass-strong py-2 md:py-3'
+            : 'bg-transparent py-4 md:py-6'
         }`}
       >
         <div className="mx-auto max-w-7xl px-6 flex items-center justify-between">
@@ -68,7 +68,7 @@ export default function Navbar() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden flex flex-col gap-1.5 p-2"
+            className="md:hidden flex flex-col gap-1.5 p-3 min-w-[44px] min-h-[44px] items-center justify-center"
             data-hover
           >
             <span className={`w-6 h-[2px] bg-white transition-all duration-300 ${mobileOpen ? 'rotate-45 translate-y-[5px]' : ''}`} />
@@ -97,7 +97,7 @@ export default function Navbar() {
                 <Link
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
-                  className="text-white text-3xl font-bold tracking-tight hover:text-red-500 transition-colors"
+                  className="text-white text-2xl sm:text-3xl font-bold tracking-tight hover:text-red-500 transition-colors"
                 >
                   {link.label}
                 </Link>

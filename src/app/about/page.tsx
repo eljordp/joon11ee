@@ -27,11 +27,11 @@ const values = [
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen pt-32 pb-20">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20">
       {/* Hero */}
       <section className="relative py-20 overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-red-600/8 rounded-full blur-[200px]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(800px,150vw)] h-[400px] bg-red-600/8 rounded-full blur-[200px]" />
         </div>
         <ParticleBackground count={25} />
 
@@ -40,7 +40,7 @@ export default function AboutPage() {
             <span className="text-red-600 text-xs tracking-[0.3em] uppercase font-semibold mb-6 block">
               Our Story
             </span>
-            <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tight mb-6">
+            <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold text-white tracking-tight mb-6">
               Born from<br />
               <span className="text-red-600">Passion.</span>
             </h1>

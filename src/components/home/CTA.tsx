@@ -7,11 +7,11 @@ import ParticleBackground from '@/components/ui/ParticleBackground';
 
 export default function CTA() {
   return (
-    <section className="relative py-40 overflow-hidden">
+    <section className="relative py-20 md:py-40 overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-red-950/20 via-black to-black" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full blur-[200px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(600px,150vw)] h-[min(600px,150vw)] bg-red-600/10 rounded-full blur-[200px]" />
       </div>
 
       <ParticleBackground count={25} />

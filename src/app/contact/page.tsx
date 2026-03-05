@@ -20,11 +20,11 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen pt-32 pb-20">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20">
       {/* Header */}
       <section className="relative py-16 overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,150vw)] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
         </div>
         <ParticleBackground count={15} />
 
@@ -47,11 +47,11 @@ export default function ContactPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
           {/* Contact Form */}
           <RevealOnScroll>
             {submitted ? (
-              <div className="p-12 border border-red-600/30 bg-red-600/5 text-center">
+              <div className="p-8 sm:p-12 border border-red-600/30 bg-red-600/5 text-center">
                 <div className="w-16 h-16 border-2 border-red-600 flex items-center justify-center mx-auto mb-6">
                   <span className="text-red-600 text-2xl">✓</span>
                 </div>

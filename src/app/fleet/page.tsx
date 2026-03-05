@@ -24,11 +24,11 @@ function FleetContent() {
   const categories = ['all', 'supercar', 'luxury', 'exotic', 'suv'];
 
   return (
-    <div className="min-h-screen pt-32 pb-20">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20">
       {/* Hero section */}
       <section className="relative py-16 overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,150vw)] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
         </div>
         <ParticleBackground count={20} />
 

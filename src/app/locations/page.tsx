@@ -14,11 +14,11 @@ const cityImages: Record<City, string> = {
 
 export default function LocationsPage() {
   return (
-    <div className="min-h-screen pt-32 pb-20">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20">
       {/* Header */}
       <section className="relative py-16 overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[min(600px,150vw)] h-[300px] bg-red-600/8 rounded-full blur-[150px]" />
         </div>
         <ParticleBackground count={20} />
 
@@ -64,7 +64,7 @@ export default function LocationsPage() {
                       {/* City name overlay */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <motion.h2
-                          className="text-6xl md:text-8xl font-bold text-white/10 tracking-tighter"
+                          className="text-4xl sm:text-6xl md:text-8xl font-bold text-white/10 tracking-tighter"
                           whileHover={{ scale: 1.05 }}
                         >
                           {cityData.name}
@@ -73,8 +73,8 @@ export default function LocationsPage() {
                     </div>
 
                     {/* City info */}
-                    <div className="p-8 lg:p-12 flex flex-col justify-center bg-black/50">
-                      <h3 className="text-3xl font-bold text-white mb-2">{cityData.fullName}</h3>
+                    <div className="p-5 sm:p-8 lg:p-12 flex flex-col justify-center bg-black/50">
+                      <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">{cityData.fullName}</h3>
                       <p className="text-red-500 text-lg mb-6">{cityData.tagline}</p>
 
                       <div className="grid grid-cols-2 gap-4 mb-8">
@@ -94,26 +94,26 @@ export default function LocationsPage() {
                       </div>
 
                       {/* Preview cars */}
-                      <div className="flex gap-3 mb-8">
+                      <div className="flex gap-2 sm:gap-3 mb-8">
                         {cityCars.slice(0, 3).map((car) => (
-                          <div key={car.id} className="flex-1 p-3 border border-white/[0.06] bg-white/[0.02]">
+                          <div key={car.id} className="flex-1 p-2 sm:p-3 border border-white/[0.06] bg-white/[0.02]">
                             <p className="text-zinc-500 text-[10px] tracking-wider uppercase">{car.brand}</p>
                             <p className="text-white text-xs font-semibold">{car.name}</p>
                           </div>
                         ))}
                       </div>
 
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                         <Link
                           href={`/fleet?city=${city}`}
-                          className="bg-red-600 text-white px-6 py-3 text-xs font-bold tracking-widest uppercase hover:bg-red-500 transition-all"
+                          className="bg-red-600 text-white px-6 py-3 text-xs font-bold tracking-widest uppercase hover:bg-red-500 transition-all text-center"
                           data-hover
                         >
                           View Fleet
                         </Link>
                         <Link
                           href={`/book?city=${city}`}
-                          className="border border-white/20 text-white px-6 py-3 text-xs font-bold tracking-widest uppercase hover:border-white/40 transition-all"
+                          className="border border-white/20 text-white px-6 py-3 text-xs font-bold tracking-widest uppercase hover:border-white/40 transition-all text-center"
                           data-hover
                         >
                           Book Now

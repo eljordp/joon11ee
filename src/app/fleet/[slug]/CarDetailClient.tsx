@@ -16,14 +16,14 @@ export default function CarDetailClient({ car, city }: CarDetailClientProps) {
   return (
     <div className="min-h-screen pt-24 pb-20">
       {/* Hero */}
-      <section className="relative py-20 overflow-hidden">
+      <section className="relative py-12 md:py-20 overflow-hidden">
         <div className="absolute inset-0">
           <div
             className="absolute inset-0 opacity-40"
             style={{ background: car.gradient }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/70 to-black" />
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-red-600/10 rounded-full blur-[150px]" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[min(500px,150vw)] h-[min(500px,150vw)] bg-red-600/10 rounded-full blur-[150px]" />
         </div>
 
         <ParticleBackground count={20} />
@@ -42,7 +42,7 @@ export default function CarDetailClient({ car, city }: CarDetailClientProps) {
             <span className="text-zinc-400">{car.brand} {car.name}</span>
           </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
             {/* Car visual */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -83,7 +83,7 @@ export default function CarDetailClient({ car, city }: CarDetailClientProps) {
                 <p className="text-zinc-500 text-sm tracking-[0.2em] uppercase mt-6 mb-1">
                   {car.brand}
                 </p>
-                <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tight mb-2">
+                <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight mb-2">
                   {car.name}
                 </h1>
                 <p className="text-zinc-500 text-lg mb-8">{car.year}</p>
@@ -97,18 +97,18 @@ export default function CarDetailClient({ car, city }: CarDetailClientProps) {
                 </div>
 
                 {/* Quick specs */}
-                <div className="grid grid-cols-3 gap-4 mb-10">
-                  <div className="p-4 border border-white/[0.06] text-center">
-                    <p className="text-2xl font-bold text-white">{car.specs.hp}</p>
-                    <p className="text-zinc-500 text-xs tracking-wider uppercase mt-1">Horsepower</p>
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-10">
+                  <div className="p-3 sm:p-4 border border-white/[0.06] text-center">
+                    <p className="text-lg sm:text-2xl font-bold text-white">{car.specs.hp}</p>
+                    <p className="text-zinc-500 text-[10px] sm:text-xs tracking-wider uppercase mt-1">Horsepower</p>
                   </div>
-                  <div className="p-4 border border-white/[0.06] text-center">
-                    <p className="text-2xl font-bold text-white">{car.specs.zeroToSixty}</p>
-                    <p className="text-zinc-500 text-xs tracking-wider uppercase mt-1">0-60 mph</p>
+                  <div className="p-3 sm:p-4 border border-white/[0.06] text-center">
+                    <p className="text-lg sm:text-2xl font-bold text-white">{car.specs.zeroToSixty}</p>
+                    <p className="text-zinc-500 text-[10px] sm:text-xs tracking-wider uppercase mt-1">0-60 mph</p>
                   </div>
-                  <div className="p-4 border border-white/[0.06] text-center">
-                    <p className="text-2xl font-bold text-white">{car.specs.topSpeed}</p>
-                    <p className="text-zinc-500 text-xs tracking-wider uppercase mt-1">Top Speed</p>
+                  <div className="p-3 sm:p-4 border border-white/[0.06] text-center">
+                    <p className="text-lg sm:text-2xl font-bold text-white">{car.specs.topSpeed}</p>
+                    <p className="text-zinc-500 text-[10px] sm:text-xs tracking-wider uppercase mt-1">Top Speed</p>
                   </div>
                 </div>
 

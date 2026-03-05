@@ -26,10 +26,12 @@ export default function Hero() {
         </div>
 
         {/* Red accent light */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/10 rounded-full blur-[150px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(800px,150vw)] h-[min(800px,150vw)] bg-red-600/10 rounded-full blur-[150px]" />
       </div>
 
-      <ParticleBackground count={40} />
+      <div className="hidden md:block">
+        <ParticleBackground count={40} />
+      </div>
 
       {/* Content */}
       <div className="relative z-20 mx-auto max-w-7xl px-6 text-center">
@@ -73,7 +75,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={loaded ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.8, delay: 0.8 }}
-          className="text-zinc-400 text-lg md:text-xl max-w-lg mx-auto mb-12 leading-relaxed"
+          className="text-zinc-400 text-base md:text-xl max-w-lg mx-auto mb-8 md:mb-12 leading-relaxed px-2"
         >
           Drive the world&apos;s most exclusive vehicles. Three cities. One unforgettable experience.
         </motion.p>
