@@ -19,6 +19,7 @@ export default function ProfilePage() {
   const [editName, setEditName] = useState('');
   const [editIG, setEditIG] = useState('');
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
 
   // Friends state
   const [friendInput, setFriendInput] = useState('');
@@ -50,11 +51,16 @@ export default function ProfilePage() {
 
   const handleSaveSettings = () => {
     if (!userData) return;
+    setSettingsError('');
     const name = editName.trim().slice(0, 16);
     if (!name) return;
 
     const ig = editIG.trim().replace(/^@/, '').slice(0, 30);
-    updateProfile(userData.user.email, { name, instagram: ig || undefined });
+    const result = updateProfile(userData.user.email, { name, instagram: ig || undefined });
+    if (result !== true) {
+      setSettingsError(result);
+      return;
+    }
     saveUsername(name);
 
     // Refresh local state
@@ -250,7 +256,7 @@ export default function ProfilePage() {
                 <input
                   type="text"
                   value={friendInput}
-                  onChange={(e) => { setFriendInput(e.target.value); setFriendError(''); }}
+                  onChange={(e) => { setFriendInput(e.target.value.replace(/[^a-zA-Z0-9_.]/g, '')); setFriendError(''); }}
                   placeholder="username"
                   maxLength={16}
                   className="w-full bg-black border border-white/[0.1] pl-7 pr-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
@@ -361,11 +367,12 @@ export default function ProfilePage() {
               <input
                 type="text"
                 value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                onChange={(e) => { setEditName(e.target.value.replace(/[^a-zA-Z0-9_.]/g, '')); setSettingsError(''); }}
                 maxLength={16}
                 className="w-full bg-black border border-white/[0.1] px-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
                 placeholder="Your username"
               />
+              <p className="text-zinc-700 text-[10px] mt-1">Letters, numbers, _ and . only</p>
             </div>
 
             <div>
@@ -393,6 +400,16 @@ export default function ProfilePage() {
                 Save
               </button>
               <AnimatePresence>
+                {settingsError && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="text-red-400 text-sm"
+                  >
+                    {settingsError}
+                  </motion.span>
+                )}
                 {settingsSaved && (
                   <motion.span
                     initial={{ opacity: 0, x: -5 }}

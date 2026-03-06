@@ -95,12 +95,13 @@ export default function AuthModal({ open, onClose, onAuth, required }: Props) {
                   <input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z0-9_.]/g, ''))}
                     maxLength={16}
                     className="w-full bg-black border border-white/[0.1] px-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
                     placeholder="Pick a username"
                     required
                   />
+                  <p className="text-zinc-700 text-[10px] mt-1">Letters, numbers, _ and . only</p>
                 </div>
               )}
 

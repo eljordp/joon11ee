@@ -30,6 +30,24 @@ export interface UserData {
 
 const USERS_KEY = 'joon11ee_users';
 const SESSION_KEY = 'joon11ee_session';
+const USERNAME_REGEX = /^[a-zA-Z0-9_.]+$/;
+
+export function validateUsername(name: string): string | null {
+  if (!name || name.length < 2) return 'Username must be at least 2 characters.';
+  if (name.length > 16) return 'Username must be 16 characters or less.';
+  if (!USERNAME_REGEX.test(name)) return 'Letters, numbers, _ and . only.';
+  return null;
+}
+
+function isUsernameTaken(name: string, excludeEmail?: string): boolean {
+  const users = getUsers();
+  const target = name.toLowerCase();
+  for (const [email, data] of Object.entries(users)) {
+    if (excludeEmail && email === excludeEmail.toLowerCase()) continue;
+    if (data.user.name.toLowerCase() === target) return true;
+  }
+  return false;
+}
 
 function getUsers(): Record<string, UserData> {
   if (typeof window === 'undefined') return {};
@@ -43,9 +61,13 @@ function saveUsers(users: Record<string, UserData>) {
 }
 
 export function signup(email: string, name: string, password: string): UserData | string {
+  const nameErr = validateUsername(name);
+  if (nameErr) return nameErr;
+
   const users = getUsers();
   const key = email.toLowerCase();
   if (users[key]) return 'Account already exists with this email.';
+  if (isUsernameTaken(name)) return 'Username is already taken.';
 
   const userData: UserData = {
     user: {
@@ -175,11 +197,17 @@ export function updateCasinoBalance(email: string, balance: number) {
   updateUserData(email, (data) => ({ ...data, casinoBalance: balance }));
 }
 
-export function updateProfile(email: string, updates: { name?: string; instagram?: string }) {
+export function updateProfile(email: string, updates: { name?: string; instagram?: string }): string | true {
+  if (updates.name) {
+    const nameErr = validateUsername(updates.name);
+    if (nameErr) return nameErr;
+    if (isUsernameTaken(updates.name, email)) return 'Username is already taken.';
+  }
   updateUserData(email, (data) => ({
     ...data,
     user: { ...data.user, ...updates },
   }));
+  return true;
 }
 
 export function findUserByUsername(username: string): UserData | null {
