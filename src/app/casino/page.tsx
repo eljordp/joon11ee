@@ -20,8 +20,9 @@ const MultiplayerCraps = dynamic(() => import('@/components/casino/MultiplayerCr
 const MultiplayerDominoes = dynamic(() => import('@/components/casino/MultiplayerDominoes'), { ssr: false });
 const MultiplayerPoker = dynamic(() => import('@/components/casino/MultiplayerPoker'), { ssr: false });
 const MultiplayerSpades = dynamic(() => import('@/components/casino/MultiplayerSpades'), { ssr: false });
+const MultiplayerHoodCraps = dynamic(() => import('@/components/casino/MultiplayerHoodCraps'), { ssr: false });
 
-type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades';
+type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades' | 'mp_hood_craps';
 
 interface LeaderboardEntry {
   player: string;
@@ -43,6 +44,7 @@ const GAMES: { id: Game; name: string; emoji: string; desc: string; live?: boole
   { id: 'mp_dominoes', name: 'Dominoes', emoji: '🁣', desc: 'Play to 100', live: true },
   { id: 'mp_poker', name: 'Poker', emoji: '🂡', desc: "Texas Hold'em", live: true },
   { id: 'mp_spades', name: 'Spades', emoji: '♠️', desc: '2v2 teams', live: true },
+  { id: 'mp_hood_craps', name: 'Hood Craps', emoji: '🎲', desc: '7s n 10s', live: true },
 ];
 
 function timeAgo(ts: number): string {
@@ -295,7 +297,7 @@ export default function CasinoPage() {
         </div>
 
         {/* Game selector */}
-        <div className="flex sm:grid sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-11 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
+        <div className="flex sm:grid sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-6 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
           {GAMES.map((game) => (
             <button
               key={game.id}
@@ -363,6 +365,9 @@ export default function CasinoPage() {
             )}
             {activeGame === 'mp_spades' && (
               <MultiplayerSpades balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+            )}
+            {activeGame === 'mp_hood_craps' && (
+              <MultiplayerHoodCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
             )}
           </motion.div>
         </AnimatePresence>

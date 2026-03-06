@@ -39,6 +39,21 @@ interface ServerState {
 
 const DICE_FACES: Record<number, string> = { 1: '⚀', 2: '⚁', 3: '⚂', 4: '⚃', 5: '⚄', 6: '⚅' };
 
+function getOutcomeLabel(total: number, point: number | null): { text: string; color: string } | null {
+  if (point === null) {
+    if (total === 7 || total === 11) return { text: 'NATURAL!', color: 'text-green-400' };
+    if (total === 2 || total === 3) return { text: 'CRAPS!', color: 'text-orange-400' };
+    if (total === 12) return { text: 'CRAPS! (12)', color: 'text-orange-400' };
+    return { text: `POINT IS ${total}`, color: 'text-yellow-400' };
+  } else {
+    if (total === point) return { text: 'POINT HIT!', color: 'text-yellow-400' };
+    if (total === 7) return { text: 'SEVEN OUT!', color: 'text-red-400' };
+    return null;
+  }
+}
+
+const PLACE_ODDS_DISPLAY: Record<number, string> = { 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5' };
+
 export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
@@ -49,6 +64,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const [myId, setMyId] = useState<string | null>(null);
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean | null } | null>(null);
   const [diceRolling, setDiceRolling] = useState(false);
+  const [outcomeLabel, setOutcomeLabel] = useState<{ text: string; color: string } | null>(null);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -95,7 +111,6 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
                 setResult({ text: 'PUSH', sub: 'no change', win: null });
               }
             }
-            // Report other players' wins
             if (onLeaderboardEntry) {
               state.results.forEach(r => {
                 if (r.playerId !== selfId && r.profit >= 500) {
@@ -106,6 +121,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           }
           if (state.phase === 'betting' || state.phase === 'point_betting') {
             setResult(null);
+            setOutcomeLabel(null);
           }
           prevPhaseRef.current = state.phase;
         }
@@ -114,8 +130,25 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
       case 'players': setPlayerCount((data.players as unknown[]).length); break;
       case 'dice_roll': {
         setDiceRolling(true);
+        setOutcomeLabel(null);
         sounds.diceRoll();
-        setTimeout(() => { setDiceRolling(false); sounds.diceLand(); }, 800);
+        setTimeout(() => {
+          setDiceRolling(false);
+          sounds.diceLand();
+          // Show outcome label after dice land
+          const total = data.total as number;
+          const currentState = serverState;
+          if (currentState) {
+            const label = getOutcomeLabel(total, currentState.point);
+            if (label) setOutcomeLabel(label);
+          }
+        }, 800);
+        break;
+      }
+      case 'point_set': {
+        setTimeout(() => {
+          setOutcomeLabel({ text: `POINT IS ${data.point as number}`, color: 'text-yellow-400' });
+        }, 900);
         break;
       }
       case 'round_result': break;
@@ -129,7 +162,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         break;
       }
     }
-  }, [onWin, onLose, onLeaderboardEntry]);
+  }, [onWin, onLose, onLeaderboardEntry, serverState]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
@@ -139,6 +172,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
     setResult(null); setChatMessages([]); prevPhaseRef.current = '';
+    setOutcomeLabel(null);
   }, []);
 
   const placeBet = useCallback((betType: string, placeNumber?: number) => {
@@ -164,9 +198,10 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
         <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} />
-        <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
-          <p className="text-zinc-500 text-sm mb-2">Create or join a room to play craps</p>
-          <p className="text-zinc-700 text-xs">Roll the bones with friends</p>
+        <div className="border border-white/[0.06] bg-zinc-950/50 p-10 text-center">
+          <div className="text-5xl mb-4">🎲</div>
+          <p className="text-zinc-400 text-sm font-bold mb-1">Roll the bones</p>
+          <p className="text-zinc-700 text-xs">Create or join a room to play craps</p>
         </div>
       </div>
     );
@@ -177,106 +212,224 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const isBetting = phase === 'betting' || phase === 'point_betting';
   const isRolling = phase === 'rolling' || phase === 'point_rolling';
   const myBets = playerBets.find(pb => pb.playerId === myId);
+  const totalBetted = myBets?.bets.reduce((sum, b) => sum + b.amount, 0) || 0;
+  const allBetsTotal = playerBets.reduce((sum, pb) => sum + pb.bets.reduce((s, b) => s + b.amount, 0), 0);
+  const shooterName = shooterId ? serverState.shooterOrder.indexOf(shooterId) : -1;
 
   return (
     <div className="space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h3 className="text-xl font-bold text-white">Craps</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
+        <div className="flex items-center gap-3">
+          {allBetsTotal > 0 && (
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-white/[0.03] text-zinc-500 border border-white/[0.06]">
+              POT ${allBetsTotal.toLocaleString()}
+            </span>
+          )}
+          <span className="text-zinc-600 text-xs font-mono">#{roundNumber}</span>
+        </div>
       </div>
 
       <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} />
 
-      {/* Roll history */}
+      {/* Roll history strip */}
       {rollHistory.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin -mx-1 px-1">
-          {rollHistory.slice(0, 15).map((h, i) => (
-            <motion.div key={`${h.total}-${i}`}
-              initial={i === 0 ? { scale: 0 } : {}} animate={{ scale: 1, opacity: 0.6 + (1 - i / 15) * 0.4 }}
-              className={`flex-shrink-0 px-2.5 py-1.5 text-[11px] font-bold ${
-                h.total === 7 ? 'bg-red-600/20 text-red-400' :
-                h.total === 11 ? 'bg-green-600/15 text-green-400' :
-                [2, 3, 12].includes(h.total) ? 'bg-orange-600/15 text-orange-400' :
-                'bg-zinc-800/50 text-zinc-300'
-              }`}
-            >
-              {DICE_FACES[h.dice[0]]}{DICE_FACES[h.dice[1]]} = {h.total}
-            </motion.div>
-          ))}
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-thin -mx-1 px-1">
+          {rollHistory.slice(0, 15).map((h, i) => {
+            const isFirst = i === 0;
+            return (
+              <motion.div key={`${roundNumber}-${h.total}-${i}`}
+                initial={isFirst ? { scale: 0, opacity: 0 } : {}}
+                animate={{ scale: 1, opacity: Math.max(0.3, 1 - i * 0.05) }}
+                transition={isFirst ? { type: 'spring', stiffness: 300, damping: 20 } : {}}
+                className={`flex-shrink-0 px-2 py-1 text-[10px] font-bold border ${
+                  h.total === 7 ? 'bg-red-600/15 text-red-400 border-red-500/20' :
+                  h.total === 11 ? 'bg-green-600/15 text-green-400 border-green-500/20' :
+                  [2, 3, 12].includes(h.total) ? 'bg-orange-600/10 text-orange-400 border-orange-500/15' :
+                  'bg-white/[0.02] text-zinc-400 border-white/[0.04]'
+                }`}
+              >
+                <span className="opacity-60">{DICE_FACES[h.dice[0]]}{DICE_FACES[h.dice[1]]}</span> {h.total}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="lg:col-span-2 space-y-3">
-          {/* Dice display */}
-          <div className="relative border border-white/[0.04] bg-black p-6 sm:p-8 text-center min-h-[180px] flex flex-col items-center justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-3">
+        {/* Main area */}
+        <div className="space-y-3">
+          {/* Phase indicator + Point */}
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-bold px-2.5 py-1 tracking-wider uppercase ${
+              phase === 'waiting' ? 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/30' :
+              phase === 'betting' ? 'bg-green-600/10 text-green-400 border border-green-500/20' :
+              phase === 'rolling' ? 'bg-red-600/10 text-red-400 border border-red-500/20' :
+              phase === 'point_betting' ? 'bg-yellow-600/10 text-yellow-400 border border-yellow-500/20' :
+              phase === 'point_rolling' ? 'bg-red-600/10 text-red-400 border border-red-500/20' :
+              'bg-white/[0.03] text-zinc-400 border border-white/[0.06]'
+            }`}>
+              {phase === 'waiting' ? 'Waiting' :
+               phase === 'betting' ? 'Come-Out Bets' :
+               phase === 'rolling' ? 'Rolling' :
+               phase === 'point_betting' ? 'Point Bets' :
+               phase === 'point_rolling' ? 'Rolling' :
+               'Results'}
+            </span>
             {point !== null && (
-              <div className="absolute top-3 left-3 flex items-center gap-2">
-                <span className="text-[10px] font-bold px-2 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 tracking-wider uppercase">
-                  Point: {point}
-                </span>
-              </div>
+              <motion.span
+                initial={{ scale: 0 }} animate={{ scale: 1 }}
+                className="text-[10px] font-black px-2.5 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 tracking-wider uppercase"
+              >
+                Point: {point}
+              </motion.span>
+            )}
+            <span className={`text-[10px] font-bold px-2.5 py-1 tracking-wider ${
+              isShooter ? 'bg-red-600/10 text-red-400 border border-red-500/20' : 'bg-white/[0.02] text-zinc-600 border border-white/[0.04]'
+            }`}>
+              {isShooter ? 'You Shoot' : `Shooter #${shooterName + 1}`}
+            </span>
+          </div>
+
+          {/* Dice display area */}
+          <div className={`relative border bg-black text-center overflow-hidden transition-colors duration-500 ${
+            phase === 'results' && result?.win === true ? 'border-green-500/20' :
+            phase === 'results' && result?.win === false ? 'border-red-500/20' :
+            'border-white/[0.04]'
+          }`}>
+            {/* Background glow on results */}
+            {phase === 'results' && result && (
+              <div className={`absolute inset-0 pointer-events-none ${
+                result.win === true ? 'bg-green-600/[0.03]' : result.win === false ? 'bg-red-600/[0.03]' : ''
+              }`} />
             )}
 
-            {phase === 'waiting' && (
-              <p className="text-zinc-500 text-sm tracking-wider uppercase">Waiting for players...</p>
-            )}
+            <div className="relative p-6 sm:p-10 min-h-[200px] flex flex-col items-center justify-center">
+              {phase === 'waiting' && (
+                <div className="space-y-2">
+                  <div className="text-4xl opacity-20">🎲🎲</div>
+                  <p className="text-zinc-600 text-sm tracking-wider uppercase">Waiting for players...</p>
+                </div>
+              )}
 
-            {isBetting && (
-              <div>
-                <p className="text-zinc-500 text-sm tracking-wider uppercase mb-2">
-                  {phase === 'betting' ? 'Place your bets' : 'Point bets open'}
-                </p>
-                <motion.p key={bettingTimeLeft} initial={{ scale: 1.3 }} animate={{ scale: 1 }}
-                  className={`text-4xl sm:text-6xl font-black ${bettingTimeLeft <= 2 ? 'text-red-400' : 'text-white'}`}
-                >
-                  {bettingTimeLeft}s
-                </motion.p>
-              </div>
-            )}
-
-            {(isRolling || phase === 'results') && (
-              <div>
-                {diceRolling ? (
-                  <motion.div animate={{ rotate: [0, 360] }} transition={{ duration: 0.4, repeat: 1 }}
-                    className="text-5xl sm:text-7xl mb-2"
-                  >
-                    🎲🎲
-                  </motion.div>
-                ) : diceTotal > 0 ? (
-                  <div>
-                    <div className="text-5xl sm:text-7xl mb-2">
-                      {DICE_FACES[dice[0]]} {DICE_FACES[dice[1]]}
-                    </div>
-                    <motion.p initial={{ scale: 1.5 }} animate={{ scale: 1 }}
-                      className={`text-3xl sm:text-5xl font-black ${
-                        diceTotal === 7 && point !== null ? 'text-red-400' :
-                        diceTotal === 7 || diceTotal === 11 ? 'text-green-400' :
-                        [2, 3, 12].includes(diceTotal) ? 'text-orange-400' :
-                        diceTotal === point ? 'text-yellow-400' : 'text-white'
-                      }`}
-                    >
-                      {diceTotal}
-                    </motion.p>
-                  </div>
-                ) : (
-                  <p className="text-zinc-500 text-sm tracking-wider uppercase">
-                    {isShooter ? 'Your roll!' : 'Waiting for shooter...'}
+              {isBetting && (
+                <div className="space-y-3">
+                  <p className="text-zinc-500 text-xs tracking-[0.2em] uppercase">
+                    {phase === 'betting' ? 'Place your come-out bets' : 'Place your point bets'}
                   </p>
-                )}
-              </div>
-            )}
+                  <motion.div key={bettingTimeLeft} initial={{ scale: 1.2 }} animate={{ scale: 1 }}
+                    className="relative"
+                  >
+                    <span className={`text-5xl sm:text-7xl font-black tabular-nums ${
+                      bettingTimeLeft <= 2 ? 'text-red-400' : bettingTimeLeft <= 4 ? 'text-yellow-400' : 'text-white'
+                    }`}>
+                      {bettingTimeLeft}
+                    </span>
+                  </motion.div>
+                  {totalBetted > 0 && (
+                    <p className="text-zinc-600 text-xs">
+                      Your bets: <span className="text-white font-bold font-mono">${totalBetted.toLocaleString()}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {(isRolling || phase === 'results') && (
+                <div className="space-y-2">
+                  {diceRolling ? (
+                    <div className="flex items-center justify-center gap-4">
+                      <motion.span
+                        animate={{ rotate: [0, 180, 360], y: [0, -20, 0] }}
+                        transition={{ duration: 0.4, repeat: 1, ease: 'easeInOut' }}
+                        className="text-5xl sm:text-7xl inline-block"
+                      >
+                        🎲
+                      </motion.span>
+                      <motion.span
+                        animate={{ rotate: [0, -180, -360], y: [0, -15, 0] }}
+                        transition={{ duration: 0.4, repeat: 1, ease: 'easeInOut', delay: 0.05 }}
+                        className="text-5xl sm:text-7xl inline-block"
+                      >
+                        🎲
+                      </motion.span>
+                    </div>
+                  ) : diceTotal > 0 ? (
+                    <div className="space-y-1">
+                      <motion.div
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                        className="flex items-center justify-center gap-3"
+                      >
+                        <span className="text-5xl sm:text-7xl">{DICE_FACES[dice[0]]}</span>
+                        <span className="text-5xl sm:text-7xl">{DICE_FACES[dice[1]]}</span>
+                      </motion.div>
+
+                      <motion.p
+                        initial={{ scale: 2, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+                        className={`text-4xl sm:text-6xl font-black ${
+                          diceTotal === 7 && point !== null ? 'text-red-400' :
+                          diceTotal === 7 || diceTotal === 11 ? 'text-green-400' :
+                          [2, 3, 12].includes(diceTotal) ? 'text-orange-400' :
+                          diceTotal === point ? 'text-yellow-400' : 'text-white'
+                        }`}
+                      >
+                        {diceTotal}
+                      </motion.p>
+
+                      {/* Outcome label */}
+                      <AnimatePresence>
+                        {outcomeLabel && (
+                          <motion.p
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className={`text-sm sm:text-base font-black tracking-[0.15em] uppercase ${outcomeLabel.color}`}
+                          >
+                            {outcomeLabel.text}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-4xl opacity-30">🎲🎲</div>
+                      <p className="text-zinc-500 text-xs tracking-wider uppercase">
+                        {isShooter ? 'Your roll — shoot!' : 'Waiting for shooter...'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Result */}
           <AnimatePresence mode="wait">
             {result && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-center">
-                <p className={`text-2xl sm:text-3xl font-black ${result.win === true ? 'text-green-400' : result.win === false ? 'text-red-400' : 'text-yellow-400'}`}>{result.text}</p>
-                <p className={`text-xs mt-1 ${result.win === true ? 'text-green-500/70' : 'text-zinc-600'}`}>{result.sub}</p>
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                className="text-center py-1"
+              >
+                <p className={`text-2xl sm:text-3xl font-black ${
+                  result.win === true ? 'text-green-400' : result.win === false ? 'text-red-400' : 'text-yellow-400'
+                }`}>
+                  {result.text}
+                </p>
+                <p className={`text-[11px] mt-0.5 tracking-wider ${
+                  result.win === true ? 'text-green-500/60' : 'text-zinc-600'
+                }`}>
+                  {result.sub}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -286,79 +439,120 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
             <div className="space-y-3">
               <CountdownTimer totalSeconds={10} remainingSeconds={bettingTimeLeft} label={phase === 'betting' ? 'Come-out bets' : 'Point bets'} />
               <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
-              <div className={`grid ${phase === 'point_betting' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'} gap-2`}>
-                {phase === 'betting' && (
-                  <>
-                    <button onClick={() => placeBet('pass')} disabled={balance < bet}
-                      className="bg-green-700 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-green-600 transition-all disabled:opacity-30"
-                    >
-                      PASS ${bet}
-                    </button>
-                    <button onClick={() => placeBet('dont_pass')} disabled={balance < bet}
-                      className="bg-red-700 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-red-600 transition-all disabled:opacity-30"
-                    >
-                      DON&apos;T PASS ${bet}
-                    </button>
-                    <button onClick={() => placeBet('field')} disabled={balance < bet}
-                      className="bg-yellow-700 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30 sm:col-span-1 col-span-2"
-                    >
-                      FIELD ${bet}
-                    </button>
-                  </>
-                )}
-                {phase === 'point_betting' && (
-                  <>
-                    <button onClick={() => placeBet('field')} disabled={balance < bet}
-                      className="bg-yellow-700 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30 col-span-2 sm:col-span-4"
-                    >
-                      FIELD ${bet}
-                    </button>
+
+              {/* Come-out bet buttons */}
+              {phase === 'betting' && (
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => placeBet('pass')} disabled={balance < bet}
+                    className="relative bg-green-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-green-600 transition-all disabled:opacity-30 group"
+                  >
+                    <span className="block">PASS</span>
+                    <span className="text-[9px] font-mono opacity-60 group-hover:opacity-80">${bet}</span>
+                  </button>
+                  <button onClick={() => placeBet('dont_pass')} disabled={balance < bet}
+                    className="relative bg-red-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-red-600 transition-all disabled:opacity-30 group"
+                  >
+                    <span className="block">DON&apos;T PASS</span>
+                    <span className="text-[9px] font-mono opacity-60 group-hover:opacity-80">${bet}</span>
+                  </button>
+                  <button onClick={() => placeBet('field')} disabled={balance < bet}
+                    className="relative bg-yellow-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30 group"
+                  >
+                    <span className="block">FIELD</span>
+                    <span className="text-[9px] font-mono opacity-60 group-hover:opacity-80">${bet}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Point phase bet buttons */}
+              {phase === 'point_betting' && (
+                <div className="space-y-2">
+                  <button onClick={() => placeBet('field')} disabled={balance < bet}
+                    className="w-full bg-yellow-700/90 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30"
+                  >
+                    FIELD <span className="font-mono opacity-70">${bet}</span>
+                    <span className="text-[9px] opacity-50 ml-2">2,3,4,9,10,11,12</span>
+                  </button>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[4, 5, 6, 8, 9, 10].map(n => (
                       <button key={n} onClick={() => placeBet('place', n)} disabled={balance < bet || n === point}
-                        className={`py-2.5 text-xs font-bold tracking-wider uppercase transition-all disabled:opacity-30 ${
-                          n === point ? 'bg-zinc-800 text-zinc-600' : 'bg-blue-700 text-white hover:bg-blue-600'
+                        className={`py-2.5 text-xs font-bold tracking-wider uppercase transition-all disabled:opacity-20 relative ${
+                          n === point
+                            ? 'bg-yellow-500/10 text-yellow-400/40 border border-yellow-500/20 cursor-not-allowed'
+                            : 'bg-blue-700/80 text-white hover:bg-blue-600 border border-blue-600/30'
                         }`}
                       >
-                        Place {n}
+                        <span className="block">{n}</span>
+                        <span className="text-[8px] font-mono opacity-50">{PLACE_ODDS_DISPLAY[n]}</span>
+                        {n === point && (
+                          <span className="absolute -top-1 -right-1 text-[7px] font-bold px-1 bg-yellow-500/30 text-yellow-400">PT</span>
+                        )}
                       </button>
                     ))}
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Roll button for shooter */}
           {isRolling && isShooter && (
-            <button onClick={rollDice}
-              className="w-full bg-red-600 text-white py-5 text-base font-black tracking-widest uppercase hover:bg-red-500 transition-all animate-pulse shadow-[0_0_30px_rgba(220,38,38,0.3)]"
+            <motion.button
+              onClick={rollDice}
+              initial={{ scale: 0.95 }}
+              animate={{ scale: [0.95, 1.02, 0.95] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-full bg-red-600 text-white py-5 text-base font-black tracking-widest uppercase hover:bg-red-500 transition-colors shadow-[0_0_40px_rgba(220,38,38,0.25)] border border-red-500/30"
             >
               🎲 ROLL THE DICE
-            </button>
+            </motion.button>
           )}
 
           {isRolling && !isShooter && (
-            <div className="text-center text-zinc-500 text-xs py-3 animate-pulse tracking-wider uppercase">
-              waiting for shooter to roll...
+            <div className="text-center py-4">
+              <motion.div
+                animate={{ opacity: [0.4, 0.8, 0.4] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-zinc-500 text-xs tracking-[0.2em] uppercase"
+              >
+                waiting for shooter to roll...
+              </motion.div>
             </div>
           )}
 
           {phase === 'results' && (
-            <div className="text-center text-zinc-500 text-xs py-3 animate-pulse tracking-wider uppercase">next round starting soon...</div>
+            <div className="text-center py-3">
+              <motion.p
+                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-zinc-600 text-xs tracking-wider uppercase"
+              >
+                next round starting soon...
+              </motion.p>
+            </div>
           )}
 
           {/* My bets */}
           {myBets && myBets.bets.length > 0 && (
             <div className="border border-white/[0.04] divide-y divide-white/[0.03]">
-              <div className="px-3 py-1.5"><span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Your Bets</span></div>
+              <div className="px-3 py-2 flex items-center justify-between">
+                <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Your Bets</span>
+                <span className="text-white text-[10px] font-bold font-mono">${totalBetted.toLocaleString()}</span>
+              </div>
               {myBets.bets.map((b, i) => (
                 <div key={i} className="flex items-center justify-between px-3 py-1.5">
-                  <span className={`text-[11px] font-bold uppercase ${
-                    b.type === 'pass' ? 'text-green-400' : b.type === 'dont_pass' ? 'text-red-400' :
-                    b.type === 'field' ? 'text-yellow-400' : 'text-blue-400'
-                  }`}>
-                    {b.type === 'place' ? `Place ${b.placeNumber}` : b.type.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      b.type === 'pass' ? 'bg-green-400' : b.type === 'dont_pass' ? 'bg-red-400' :
+                      b.type === 'field' ? 'bg-yellow-400' : 'bg-blue-400'
+                    }`} />
+                    <span className={`text-[11px] font-bold uppercase ${
+                      b.type === 'pass' ? 'text-green-400' : b.type === 'dont_pass' ? 'text-red-400' :
+                      b.type === 'field' ? 'text-yellow-400' : 'text-blue-400'
+                    }`}>
+                      {b.type === 'place' ? `Place ${b.placeNumber}` : b.type.replace('_', ' ')}
+                    </span>
+                  </div>
                   <span className="text-white text-[11px] font-bold font-mono">${b.amount}</span>
                 </div>
               ))}
@@ -366,31 +560,115 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           )}
 
           {/* Results */}
-          {phase === 'results' && results.length > 0 && (
+          <AnimatePresence>
+            {phase === 'results' && results.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="border border-white/[0.04] divide-y divide-white/[0.03]"
+              >
+                <div className="px-3 py-2">
+                  <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Round Results</span>
+                </div>
+                {results.map((r, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className={`flex items-center justify-between px-3 py-2 ${
+                      r.playerId === myId ? 'bg-white/[0.02]' : ''
+                    }`}
+                  >
+                    <span className={`text-[11px] font-bold ${r.playerId === myId ? 'text-white' : 'text-zinc-500'}`}>
+                      {r.playerId === myId ? '→ You' : r.playerName}
+                    </span>
+                    <span className={`text-[11px] font-bold font-mono ${
+                      r.profit > 0 ? 'text-green-400' : r.profit < 0 ? 'text-red-400' : 'text-yellow-400'
+                    }`}>
+                      {r.profit > 0 ? '+' : ''}{r.profit === 0 ? 'PUSH' : `$${r.profit.toLocaleString()}`}
+                    </span>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-3">
+          {/* Quick rules / odds */}
+          <div className="border border-white/[0.04] p-3">
+            <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold block mb-2">Come-Out Roll</span>
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px]">
+                <span className="text-green-400 font-bold">7 or 11</span>
+                <span className="text-zinc-500">Pass wins</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-orange-400 font-bold">2, 3, 12</span>
+                <span className="text-zinc-500">Pass loses</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-yellow-400 font-bold">Other</span>
+                <span className="text-zinc-500">Sets point</span>
+              </div>
+            </div>
+            <div className="border-t border-white/[0.04] mt-2 pt-2">
+              <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold block mb-1">Point Roll</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-yellow-400 font-bold">Hit point</span>
+                  <span className="text-zinc-500">Pass wins</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-red-400 font-bold">7 (seven out)</span>
+                  <span className="text-zinc-500">Pass loses</span>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-white/[0.04] mt-2 pt-2">
+              <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold block mb-1">Field</span>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-yellow-400 font-bold">2,3,4,9,10,11,12</span>
+                <span className="text-zinc-500">1:1</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-yellow-300 font-bold">2 or 12</span>
+                <span className="text-zinc-500">2:1</span>
+              </div>
+            </div>
+          </div>
+
+          {/* All players' bets */}
+          {playerBets.length > 0 && playerBets.some(pb => pb.bets.length > 0) && (
             <div className="border border-white/[0.04] divide-y divide-white/[0.03]">
-              <div className="px-3 py-1.5"><span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Round Results</span></div>
-              {results.map((r, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-1.5">
-                  <span className={`text-[11px] font-bold ${r.playerId === myId ? 'text-red-400' : 'text-zinc-400'}`}>
-                    {r.playerId === myId ? 'You' : r.playerName}
+              <div className="px-3 py-1.5">
+                <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Table Bets</span>
+              </div>
+              {playerBets.filter(pb => pb.bets.length > 0).map((pb, i) => (
+                <div key={i} className="px-3 py-1.5">
+                  <span className={`text-[10px] font-bold block mb-0.5 ${pb.playerId === myId ? 'text-white' : 'text-zinc-500'}`}>
+                    {pb.playerId === myId ? 'You' : pb.playerName}
                   </span>
-                  <span className={`text-[11px] font-bold font-mono ${r.profit > 0 ? 'text-green-400' : r.profit < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
-                    {r.profit > 0 ? '+' : ''}{r.profit === 0 ? 'PUSH' : `$${r.profit.toLocaleString()}`}
-                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {pb.bets.map((b, j) => (
+                      <span key={j} className={`text-[9px] font-bold px-1.5 py-0.5 ${
+                        b.type === 'pass' ? 'bg-green-600/15 text-green-400' :
+                        b.type === 'dont_pass' ? 'bg-red-600/15 text-red-400' :
+                        b.type === 'field' ? 'bg-yellow-600/15 text-yellow-400' :
+                        'bg-blue-600/15 text-blue-400'
+                      }`}>
+                        {b.type === 'place' ? `P${b.placeNumber}` : b.type === 'dont_pass' ? 'DP' : b.type.charAt(0).toUpperCase() + b.type.slice(1)} ${b.amount}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
 
-        <div className="space-y-3">
-          {/* Shooter info */}
-          <div className="border border-white/[0.04] p-3">
-            <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold block mb-1">Shooter</span>
-            <span className={`text-sm font-bold ${isShooter ? 'text-red-400' : 'text-zinc-400'}`}>
-              {isShooter ? 'You' : serverState.shooterOrder.length > 0 ? '🎲 Shooting...' : 'None'}
-            </span>
-          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>

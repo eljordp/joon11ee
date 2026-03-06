@@ -8,7 +8,8 @@
     "craps": "party/craps.ts",
     "dominoes": "party/dominoes.ts",
     "poker": "party/poker.ts",
-    "spades": "party/spades.ts"
+    "spades": "party/spades.ts",
+    "hood-craps": "party/hood-craps.ts"
   },
   "compatibilityDate": "2024-09-01"
 }
