@@ -2,6 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  instagram?: string;
   createdAt: string;
 }
 
@@ -15,10 +16,16 @@ export interface CasinoDayStat {
   biggestLoss: number;
 }
 
+export interface Friend {
+  username: string;
+  addedAt: string;
+}
+
 export interface UserData {
   user: User;
   casinoStats: CasinoDayStat[];
   casinoBalance: number;
+  friends?: Friend[];
 }
 
 const USERS_KEY = 'joon11ee_users';
@@ -166,4 +173,49 @@ export function recordCasinoGame(
 
 export function updateCasinoBalance(email: string, balance: number) {
   updateUserData(email, (data) => ({ ...data, casinoBalance: balance }));
+}
+
+export function updateProfile(email: string, updates: { name?: string; instagram?: string }) {
+  updateUserData(email, (data) => ({
+    ...data,
+    user: { ...data.user, ...updates },
+  }));
+}
+
+export function findUserByUsername(username: string): UserData | null {
+  const users = getUsers();
+  const target = username.toLowerCase();
+  for (const data of Object.values(users)) {
+    if (data.user.name.toLowerCase() === target) return data;
+  }
+  return null;
+}
+
+export function addFriend(email: string, friendUsername: string): string | true {
+  const users = getUsers();
+  const key = email.toLowerCase();
+  const me = users[key];
+  if (!me) return 'Not logged in.';
+
+  if (me.user.name.toLowerCase() === friendUsername.toLowerCase()) return 'Cannot add yourself.';
+
+  const friend = findUserByUsername(friendUsername);
+  if (!friend) return 'User not found.';
+
+  const friends = me.friends || [];
+  if (friends.some((f) => f.username.toLowerCase() === friendUsername.toLowerCase())) {
+    return 'Already friends.';
+  }
+
+  friends.push({ username: friend.user.name, addedAt: new Date().toISOString() });
+  me.friends = friends;
+  saveUsers(users);
+  return true;
+}
+
+export function removeFriend(email: string, friendUsername: string) {
+  updateUserData(email, (data) => ({
+    ...data,
+    friends: (data.friends || []).filter((f) => f.username.toLowerCase() !== friendUsername.toLowerCase()),
+  }));
 }

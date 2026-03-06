@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { getSession, logout, type UserData, type CasinoDayStat } from '@/lib/auth';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getSession, logout, updateProfile, addFriend, removeFriend, type UserData, type CasinoDayStat, type Friend } from '@/lib/auth';
+import { setUsername as saveUsername } from '@/lib/casino';
 import { getBookings, type Booking } from '@/lib/bookings';
 import { formatPrice } from '@/data/fleet';
 import AuthModal from '@/components/auth/AuthModal';
@@ -12,13 +13,25 @@ export default function ProfilePage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [authOpen, setAuthOpen] = useState(false);
-  const [tab, setTab] = useState<'rentals' | 'casino'>('casino');
+  const [tab, setTab] = useState<'casino' | 'friends' | 'rentals' | 'settings'>('casino');
+
+  // Settings state
+  const [editName, setEditName] = useState('');
+  const [editIG, setEditIG] = useState('');
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Friends state
+  const [friendInput, setFriendInput] = useState('');
+  const [friendError, setFriendError] = useState('');
+  const [friendSuccess, setFriendSuccess] = useState('');
 
   useEffect(() => {
     const session = getSession();
     if (session) {
       setUserData(session);
       setBookings(getBookings());
+      setEditName(session.user.name);
+      setEditIG(session.user.instagram || '');
     }
   }, []);
 
@@ -26,11 +39,58 @@ export default function ProfilePage() {
     setUserData(data);
     setBookings(getBookings());
     setAuthOpen(false);
+    setEditName(data.user.name);
+    setEditIG(data.user.instagram || '');
   };
 
   const handleLogout = () => {
     logout();
     setUserData(null);
+  };
+
+  const handleSaveSettings = () => {
+    if (!userData) return;
+    const name = editName.trim().slice(0, 16);
+    if (!name) return;
+
+    const ig = editIG.trim().replace(/^@/, '').slice(0, 30);
+    updateProfile(userData.user.email, { name, instagram: ig || undefined });
+    saveUsername(name);
+
+    // Refresh local state
+    const session = getSession();
+    if (session) setUserData(session);
+
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
+
+  const handleAddFriend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userData) return;
+    setFriendError('');
+    setFriendSuccess('');
+
+    const input = friendInput.trim().replace(/^@/, '');
+    if (!input) return;
+
+    const result = addFriend(userData.user.email, input);
+    if (result === true) {
+      setFriendSuccess(`Added @${input}`);
+      setFriendInput('');
+      const session = getSession();
+      if (session) setUserData(session);
+      setTimeout(() => setFriendSuccess(''), 3000);
+    } else {
+      setFriendError(result);
+    }
+  };
+
+  const handleRemoveFriend = (username: string) => {
+    if (!userData) return;
+    removeFriend(userData.user.email, username);
+    const session = getSession();
+    if (session) setUserData(session);
   };
 
   if (!userData) {
@@ -64,6 +124,8 @@ export default function ProfilePage() {
     { games: 0, wagered: 0, won: 0, net: 0 }
   );
 
+  const friends = userData.friends || [];
+
   return (
     <div className="min-h-screen bg-black pt-24 md:pt-32 pb-20">
       <div className="mx-auto max-w-4xl px-6">
@@ -75,7 +137,19 @@ export default function ProfilePage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white">{userData.user.name}</h1>
-              <p className="text-zinc-500 text-sm">{userData.user.email}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-zinc-500 text-sm">{userData.user.email}</p>
+                {userData.user.instagram && (
+                  <a
+                    href={`https://instagram.com/${userData.user.instagram}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400/70 text-sm hover:text-pink-400 transition-colors"
+                  >
+                    @{userData.user.instagram}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
           <button onClick={handleLogout} className="text-zinc-500 text-xs tracking-wider uppercase hover:text-white transition-colors">
@@ -106,23 +180,18 @@ export default function ProfilePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-8">
-          <button
-            onClick={() => setTab('casino')}
-            className={`px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
-              tab === 'casino' ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
-            }`}
-          >
-            Casino History
-          </button>
-          <button
-            onClick={() => setTab('rentals')}
-            className={`px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
-              tab === 'rentals' ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
-            }`}
-          >
-            Rental History
-          </button>
+        <div className="flex gap-2 mb-8 flex-wrap">
+          {(['casino', 'friends', 'rentals', 'settings'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
+                tab === t ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
+              }`}
+            >
+              {t === 'friends' ? `Friends${friends.length > 0 ? ` (${friends.length})` : ''}` : t === 'casino' ? 'Casino History' : t === 'rentals' ? 'Rental History' : 'Settings'}
+            </button>
+          ))}
         </div>
 
         {/* Casino history */}
@@ -171,6 +240,83 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* Friends */}
+        {tab === 'friends' && (
+          <div className="space-y-6">
+            {/* Add friend form */}
+            <form onSubmit={handleAddFriend} className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">@</span>
+                <input
+                  type="text"
+                  value={friendInput}
+                  onChange={(e) => { setFriendInput(e.target.value); setFriendError(''); }}
+                  placeholder="username"
+                  maxLength={16}
+                  className="w-full bg-black border border-white/[0.1] pl-7 pr-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!friendInput.trim()}
+                className="px-6 py-3 bg-red-600 text-white text-xs font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Add
+              </button>
+            </form>
+
+            <AnimatePresence>
+              {friendError && (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-red-400 text-sm">
+                  {friendError}
+                </motion.p>
+              )}
+              {friendSuccess && (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-green-400 text-sm">
+                  {friendSuccess}
+                </motion.p>
+              )}
+            </AnimatePresence>
+
+            {/* Friends list */}
+            {friends.length === 0 ? (
+              <div className="text-center py-16 border border-white/[0.04]">
+                <p className="text-zinc-500 text-lg mb-2">No friends yet</p>
+                <p className="text-zinc-700 text-sm">Add friends by their @username</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {friends.map((f: Friend) => (
+                  <motion.div
+                    key={f.username}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="border border-white/[0.06] p-4 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 border border-white/10 flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">{f.username[0].toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-sm">@{f.username}</p>
+                        <p className="text-zinc-600 text-[10px]">
+                          Added {new Date(f.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveFriend(f.username)}
+                      className="text-zinc-600 text-[10px] font-bold tracking-wider uppercase hover:text-red-400 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Rental history */}
         {tab === 'rentals' && (
           <div>
@@ -204,6 +350,67 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Settings */}
+        {tab === 'settings' && (
+          <div className="max-w-lg space-y-6">
+            <div>
+              <label className="block text-zinc-400 text-xs tracking-wider uppercase mb-2">Username</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={16}
+                className="w-full bg-black border border-white/[0.1] px-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
+                placeholder="Your username"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 text-xs tracking-wider uppercase mb-2">Instagram</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">@</span>
+                <input
+                  type="text"
+                  value={editIG}
+                  onChange={(e) => setEditIG(e.target.value.replace(/^@/, ''))}
+                  maxLength={30}
+                  className="w-full bg-black border border-white/[0.1] pl-7 pr-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
+                  placeholder="yourhandle"
+                />
+              </div>
+              <p className="text-zinc-700 text-[10px] mt-1">Shows on your profile</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveSettings}
+                disabled={!editName.trim()}
+                className="bg-red-600 text-white px-8 py-3 text-xs font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-30"
+              >
+                Save
+              </button>
+              <AnimatePresence>
+                {settingsSaved && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="text-green-400 text-sm"
+                  >
+                    Saved
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="border-t border-white/[0.04] pt-6 mt-8">
+              <p className="text-zinc-600 text-xs mb-1">Account</p>
+              <p className="text-zinc-500 text-sm">{userData.user.email}</p>
+              <p className="text-zinc-700 text-[10px] mt-1">Joined {new Date(userData.user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+            </div>
           </div>
         )}
       </div>
