@@ -20,6 +20,7 @@ interface Props {
   username?: string;
   initialRoom?: string | null;
   gameId?: string;
+  onPlayersChange?: (players: { name: string }[]) => void;
 }
 
 interface CrapsBet { type: 'pass' | 'dont_pass' | 'field' | 'place'; amount: number; placeNumber?: number; }
@@ -56,7 +57,7 @@ function getOutcomeLabel(total: number, point: number | null): { text: string; c
 
 const PLACE_ODDS_DISPLAY: Record<number, string> = { 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5' };
 
-export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
+export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId, onPlayersChange }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -67,20 +68,24 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean | null } | null>(null);
   const [diceRolling, setDiceRolling] = useState(false);
   const [outcomeLabel, setOutcomeLabel] = useState<{ text: string; color: string } | null>(null);
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
   const serverStateRef = useRef<ServerState | null>(null);
+  const passwordRef = useRef<string | undefined>(undefined);
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
+    passwordRef.current = password;
+    setAuthError(undefined);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'craps', room: id });
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲' }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current }));
     });
     ws.addEventListener('message', (evt) => {
       const data = JSON.parse(evt.data);
@@ -131,7 +136,12 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         }
         break;
       }
-      case 'players': setPlayerCount((data.players as unknown[]).length); break;
+      case 'players': {
+        const players = data.players as Array<{ name: string }>;
+        setPlayerCount(players.length);
+        onPlayersChange?.(players.map(p => ({ name: p.name })));
+        break;
+      }
       case 'dice_roll': {
         setDiceRolling(true);
         setOutcomeLabel(null);
@@ -162,13 +172,18 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         }]);
         break;
       }
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        setConnected(false);
+        break;
+      }
     }
   }, [onWin, onLose, onLeaderboardEntry]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
-  const createRoom = useCallback(() => connectToRoom(generateRoomCode()), [connectToRoom]);
-  const joinRoom = useCallback((code: string) => connectToRoom(code), [connectToRoom]);
+  const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
+  const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
@@ -176,9 +191,18 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
     setOutcomeLabel(null);
   }, []);
 
+  // Track total wagered this round locally to prevent over-betting
+  const roundWagered = useRef(0);
+  useEffect(() => {
+    if (serverState && (serverState.phase === 'betting' || serverState.phase === 'point_betting') && prevPhaseRef.current !== serverState.phase) {
+      if (serverState.phase === 'betting') roundWagered.current = 0;
+    }
+  }, [serverState]);
+
   const placeBet = useCallback((betType: string, placeNumber?: number) => {
-    if (!wsRef.current || balance < bet) return;
+    if (!wsRef.current || (balance - roundWagered.current) < bet) return;
     wsRef.current.send(JSON.stringify({ type: 'bet', betType, amount: bet, placeNumber }));
+    roundWagered.current += bet;
     sounds.bet();
   }, [balance, bet]);
 
@@ -203,7 +227,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           <h3 className="text-xl font-bold text-white">Craps</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-10 text-center">
           <div className="text-5xl mb-4">🎲</div>
           <p className="text-zinc-400 text-sm font-bold mb-1">Roll the bones</p>
@@ -220,6 +244,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const myBets = playerBets.find(pb => pb.playerId === myId);
   const totalBetted = myBets?.bets.reduce((sum, b) => sum + b.amount, 0) || 0;
   const allBetsTotal = playerBets.reduce((sum, pb) => sum + pb.bets.reduce((s, b) => s + b.amount, 0), 0);
+  const canBet = (balance - roundWagered.current) >= bet;
   const shooterName = shooterId ? serverState.shooterOrder.indexOf(shooterId) : -1;
 
   return (
@@ -240,7 +265,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         </div>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
 
       {/* Roll history strip */}
       {rollHistory.length > 0 && (
@@ -458,19 +483,19 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
               {/* Come-out bet buttons */}
               {phase === 'betting' && (
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => placeBet('pass')} disabled={balance < bet}
+                  <button onClick={() => placeBet('pass')} disabled={!canBet}
                     className="relative bg-green-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-green-600 transition-all disabled:opacity-30 group"
                   >
                     <span className="block">PASS</span>
                     <span className="text-[9px] font-mono opacity-60 group-hover:opacity-80">${bet}</span>
                   </button>
-                  <button onClick={() => placeBet('dont_pass')} disabled={balance < bet}
+                  <button onClick={() => placeBet('dont_pass')} disabled={!canBet}
                     className="relative bg-red-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-red-600 transition-all disabled:opacity-30 group"
                   >
                     <span className="block">DON&apos;T PASS</span>
                     <span className="text-[9px] font-mono opacity-60 group-hover:opacity-80">${bet}</span>
                   </button>
-                  <button onClick={() => placeBet('field')} disabled={balance < bet}
+                  <button onClick={() => placeBet('field')} disabled={!canBet}
                     className="relative bg-yellow-700/90 text-white py-3.5 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30 group"
                   >
                     <span className="block">FIELD</span>
@@ -482,7 +507,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
               {/* Point phase bet buttons */}
               {phase === 'point_betting' && (
                 <div className="space-y-2">
-                  <button onClick={() => placeBet('field')} disabled={balance < bet}
+                  <button onClick={() => placeBet('field')} disabled={!canBet}
                     className="w-full bg-yellow-700/90 text-white py-3 text-xs font-bold tracking-widest uppercase hover:bg-yellow-600 transition-all disabled:opacity-30"
                   >
                     FIELD <span className="font-mono opacity-70">${bet}</span>
@@ -490,7 +515,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
                   </button>
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[4, 5, 6, 8, 9, 10].map(n => (
-                      <button key={n} onClick={() => placeBet('place', n)} disabled={balance < bet || n === point}
+                      <button key={n} onClick={() => placeBet('place', n)} disabled={!canBet || n === point}
                         className={`py-2.5 text-xs font-bold tracking-wider uppercase transition-all disabled:opacity-20 relative ${
                           n === point
                             ? 'bg-yellow-500/10 text-yellow-400/40 border border-yellow-500/20 cursor-not-allowed'
@@ -598,7 +623,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
                     }`}
                   >
                     <span className={`text-[11px] font-bold ${r.playerId === myId ? 'text-white' : 'text-zinc-500'}`}>
-                      {r.playerId === myId ? '→ You' : r.playerName}
+                      {r.playerId === myId ? `→ ${r.playerName}` : r.playerName}
                     </span>
                     <span className={`text-[11px] font-bold font-mono ${
                       r.profit > 0 ? 'text-green-400' : r.profit < 0 ? 'text-red-400' : 'text-yellow-400'
@@ -666,7 +691,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
               {playerBets.filter(pb => pb.bets.length > 0).map((pb, i) => (
                 <div key={i} className="px-3 py-1.5">
                   <span className={`text-[10px] font-bold block mb-0.5 ${pb.playerId === myId ? 'text-white' : 'text-zinc-500'}`}>
-                    {pb.playerId === myId ? 'You' : pb.playerName}
+                    {pb.playerName}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {pb.bets.map((b, j) => (

@@ -48,6 +48,8 @@ export default class HoodCrapsServer implements Party.Server {
   state: HoodCrapsState;
   bettingTimer: ReturnType<typeof setInterval> | null = null;
   timers: ReturnType<typeof setTimeout>[] = [];
+  roomPassword: string | null = null;
+  hostId: string | null = null;
 
   constructor(readonly room: Party.Room) {
     this.state = {
@@ -78,6 +80,8 @@ export default class HoodCrapsServer implements Party.Server {
     if (this.players.size === 0) {
       this.stopAllTimers();
       this.state.phase = 'waiting';
+      this.roomPassword = null;
+      this.hostId = null;
     }
   }
 
@@ -92,8 +96,16 @@ export default class HoodCrapsServer implements Party.Server {
   }
 
   private handleJoin(conn: Party.Connection, data: Record<string, unknown>) {
+    if (!this.hostId && data.password) this.roomPassword = String(data.password);
+    if (this.roomPassword && conn.id !== this.hostId) {
+      if (String(data.password || "") !== this.roomPassword) {
+        conn.send(JSON.stringify({ type: "auth_error", message: "Wrong password" }));
+        return;
+      }
+    }
     const player: Player = { id: conn.id, name: (data.name as string) || 'Anon', avatar: (data.avatar as string) || '🎲' };
     this.players.set(conn.id, player);
+    if (!this.hostId) this.hostId = conn.id;
     if (!this.state.shooterOrder.includes(conn.id)) this.state.shooterOrder.push(conn.id);
     this.broadcast({ type: 'player_joined', player });
     this.broadcastPlayers();

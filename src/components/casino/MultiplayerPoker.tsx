@@ -21,6 +21,7 @@ interface Props {
   username?: string;
   initialRoom?: string | null;
   gameId?: string;
+  onPlayersChange?: (players: { name: string }[]) => void;
 }
 
 interface SeatData {
@@ -77,7 +78,7 @@ function PokerCard({ card, hidden, index, small }: { card: Card; hidden?: boolea
   );
 }
 
-export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
+export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId, onPlayersChange }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -87,18 +88,22 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean | null } | null>(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(0);
   const [raiseAmount, setRaiseAmount] = useState(200);
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
+  const passwordRef = useRef<string | undefined>(undefined);
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
+    passwordRef.current = password;
+    setAuthError(undefined);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'poker', room: id });
     ws.addEventListener('open', () => {
       setConnected(true); setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🂡' }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🂡', password: passwordRef.current }));
     });
     ws.addEventListener('message', (evt) => handleServerMessage(JSON.parse(evt.data), ws.id));
     ws.addEventListener('close', () => setConnected(false));
@@ -148,7 +153,12 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
         }
         break;
       }
-      case 'players': setPlayerCount((data.players as unknown[]).length); break;
+      case 'players': {
+        const players = data.players as Array<{ name: string }>;
+        setPlayerCount(players.length);
+        onPlayersChange?.(players.map(p => ({ name: p.name })));
+        break;
+      }
       case 'turn_tick': setTurnTimeLeft(data.remaining as number); break;
       case 'action': sounds.chipStack(); break;
       case 'chat': {
@@ -160,13 +170,18 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
         }]);
         break;
       }
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        setConnected(false);
+        break;
+      }
     }
   }, [onWin, onLose, onLeaderboardEntry]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
-  const createRoom = useCallback(() => connectToRoom(generateRoomCode()), [connectToRoom]);
-  const joinRoom = useCallback((code: string) => connectToRoom(code), [connectToRoom]);
+  const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
+  const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
@@ -188,7 +203,7 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
           <h3 className="text-xl font-bold text-white">Texas Hold&apos;em</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play poker</p>
           <p className="text-zinc-700 text-xs">2-8 players, Texas Hold&apos;em</p>
@@ -216,7 +231,7 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
         <span className="text-zinc-600 text-xs">Hand #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2 space-y-3">

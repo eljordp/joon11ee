@@ -21,6 +21,7 @@ interface Props {
   username?: string;
   initialRoom?: string | null;
   gameId?: string;
+  onPlayersChange?: (players: { name: string }[]) => void;
 }
 
 interface SeatState {
@@ -82,7 +83,7 @@ function PlayingCard({ card, hidden = false, index, small = false }: { card: Car
   );
 }
 
-export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
+export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId, onPlayersChange }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [bet, setBet] = useState(100);
@@ -95,13 +96,40 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const [playerCount, setPlayerCount] = useState(0);
   const [myId, setMyId] = useState<string | null>(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(0);
+  const [lastBet, setLastBet] = useState<number | null>(null);
+  const [stats, setStats] = useState({ hands: 0, wins: 0, losses: 0, pushes: 0, streak: 0, bestWin: 0, sessionProfit: 0 });
+  const [streakCelebration, setStreakCelebration] = useState<number | null>(null);
+  const [reactions, setReactions] = useState<Map<number, { emoji: string; key: number }>>(new Map());
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const updateStats = useCallback((outcome: 'win' | 'loss' | 'push', amount: number) => {
+    setStats(prev => {
+      const newStreak = outcome === 'win' ? (prev.streak > 0 ? prev.streak + 1 : 1)
+        : outcome === 'loss' ? (prev.streak < 0 ? prev.streak - 1 : -1) : 0;
+      const profit = outcome === 'win' ? amount : outcome === 'loss' ? -amount : 0;
+      if (newStreak === 3 || newStreak === 5 || newStreak === 10) {
+        setStreakCelebration(newStreak);
+        setTimeout(() => sounds.hotStreak(), 500);
+        setTimeout(() => setStreakCelebration(null), 1800);
+      }
+      return {
+        hands: prev.hands + 1,
+        wins: prev.wins + (outcome === 'win' ? 1 : 0),
+        losses: prev.losses + (outcome === 'loss' ? 1 : 0),
+        pushes: prev.pushes + (outcome === 'push' ? 1 : 0),
+        streak: newStreak,
+        bestWin: outcome === 'win' ? Math.max(prev.bestWin, amount) : prev.bestWin,
+        sessionProfit: prev.sessionProfit + profit,
+      };
+    });
+  }, []);
+
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
 
     const ws = new PartySocket({
@@ -113,7 +141,8 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮' }));
+      setAuthError(undefined);
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password }));
     });
 
     ws.addEventListener('message', (evt) => {
@@ -157,17 +186,21 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           if (state.phase === 'results') {
             // Report own results
             if (mySeat && mySeat.bet > 0 && mySeat.hand.length > 0) {
+              setLastBet(mySeat.doubled ? mySeat.bet / 2 : mySeat.bet);
               if (mySeat.profit > 0) {
                 sounds.win();
                 onWin(mySeat.profit + mySeat.bet, mySeat.bet);
+                updateStats('win', mySeat.profit);
                 const isBJ = mySeat.handValue === 21 && mySeat.hand.length === 2;
                 setResult({ text: `+$${mySeat.profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: true });
                 if (isBJ) sounds.jackpot();
               } else if (mySeat.profit < 0) {
                 sounds.lose();
                 onLose(Math.abs(mySeat.profit));
+                updateStats('loss', Math.abs(mySeat.profit));
                 setResult({ text: `-$${Math.abs(mySeat.profit).toLocaleString()}`, sub: mySeat.handValue > 21 ? 'BUST' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: false });
               } else {
+                updateStats('push', 0);
                 setResult({ text: 'PUSH', sub: `both ${mySeat.handValue}`, win: null });
               }
             }
@@ -192,7 +225,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       }
 
       case 'players': {
-        setPlayerCount((data.players as unknown[]).length);
+        const players = data.players as Array<{ name: string }>;
+        setPlayerCount(players.length);
+        onPlayersChange?.(players.map(p => ({ name: p.name })));
         break;
       }
 
@@ -209,13 +244,27 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           avatar: data.avatar as string,
           text: data.text as string,
           timestamp: Date.now(),
-          type: 'chat',
+          type: (data.chatType as ChatMessage['type']) || 'chat',
         };
         setChatMessages((prev) => [...prev.slice(-100), msg]);
         break;
       }
+
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        break;
+      }
+
+      case 'reaction': {
+        const seatIdx = data.seatIndex as number;
+        const emojiMap: Record<string, string> = { fire: '🔥', skull: '💀', party: '🎉', shocked: '😱' };
+        const emoji = emojiMap[data.emoji as string] || '🔥';
+        setReactions(prev => { const next = new Map(prev); next.set(seatIdx, { emoji, key: Date.now() }); return next; });
+        setTimeout(() => setReactions(prev => { const next = new Map(prev); next.delete(seatIdx); return next; }), 2000);
+        break;
+      }
     }
-  }, [onWin, onLose]);
+  }, [onWin, onLose, updateStats]);
 
   useEffect(() => {
     return () => {
@@ -223,8 +272,8 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     };
   }, []);
 
-  const createRoom = useCallback(() => connectToRoom(generateRoomCode()), [connectToRoom]);
-  const joinRoom = useCallback((code: string) => connectToRoom(code), [connectToRoom]);
+  const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
+  const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null;
@@ -245,10 +294,12 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     sounds.click();
   }, [seated]);
 
-  const placeBet = useCallback(() => {
-    if (!wsRef.current || hasBet || balance < bet) return;
-    wsRef.current.send(JSON.stringify({ type: 'bet', amount: bet }));
+  const placeBet = useCallback((amount?: number) => {
+    const betAmount = amount || bet;
+    if (!wsRef.current || hasBet || balance < betAmount) return;
+    wsRef.current.send(JSON.stringify({ type: 'bet', amount: betAmount }));
     setHasBet(true);
+    setLastBet(betAmount);
     sounds.bet();
   }, [hasBet, balance, bet]);
 
@@ -262,6 +313,10 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
   const sendChat = useCallback((text: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
+  }, []);
+
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
   }, []);
 
   const addBot = useCallback(() => {
@@ -280,7 +335,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           <h3 className="text-xl font-bold text-white">Blackjack Table</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer blackjack</p>
           <p className="text-zinc-700 text-xs">Share the room code with friends or play with bots</p>
@@ -297,16 +352,53 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const botIdSet = new Set(botIds || []);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 relative">
+      {/* Streak celebration overlay */}
+      <AnimatePresence>
+        {streakCelebration && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.5 }}
+            className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"
+          >
+            <div className={`text-center ${streakCelebration >= 10 ? 'text-yellow-400' : streakCelebration >= 5 ? 'text-green-400' : 'text-white'}`}>
+              <p className="text-5xl font-black">W{streakCelebration}</p>
+              <p className="text-sm tracking-[0.3em] uppercase font-bold mt-1">
+                {streakCelebration >= 10 ? 'LEGENDARY' : streakCelebration >= 5 ? 'ON FIRE' : 'HOT STREAK'}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h3 className="text-xl font-bold text-white">Blackjack Table</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
+          {stats.streak !== 0 && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 ${stats.streak > 0 ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+              {stats.streak > 0 ? `W${stats.streak}` : `L${Math.abs(stats.streak)}`}
+            </span>
+          )}
         </div>
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+
+      {/* Session stats */}
+      {stats.hands > 0 && (
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap px-3 py-2 bg-zinc-900/30 border border-white/[0.04] text-[10px] tracking-wider uppercase">
+          <span className="text-zinc-600">Hands <span className="text-zinc-400 font-bold">{stats.hands}</span></span>
+          <span className="text-zinc-600">W <span className="text-green-400 font-bold">{stats.wins}</span></span>
+          <span className="text-zinc-600">L <span className="text-red-400 font-bold">{stats.losses}</span></span>
+          <span className="text-zinc-600">Win% <span className="text-white font-bold">{Math.round((stats.wins / stats.hands) * 100)}%</span></span>
+          <span className={`font-bold font-mono ml-auto ${stats.sessionProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {stats.sessionProfit >= 0 ? '+' : ''}${stats.sessionProfit.toLocaleString()}
+          </span>
+        </div>
+      )}
 
       <div className="border border-white/[0.06] bg-zinc-950/50 p-4 sm:p-6">
         {/* Dealer */}
@@ -349,6 +441,20 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                 }`}
                 onClick={() => { if (isEmpty && !seated) sitDown(idx); }}
               >
+                {/* Reaction bubble */}
+                <AnimatePresence>
+                  {reactions.has(idx) && (
+                    <motion.div
+                      key={reactions.get(idx)!.key}
+                      initial={{ opacity: 0, y: 10, scale: 0 }}
+                      animate={{ opacity: 1, y: -20, scale: 1.5 }}
+                      exit={{ opacity: 0, y: -40, scale: 0.5 }}
+                      className="absolute -top-6 left-1/2 -translate-x-1/2 text-2xl z-10 pointer-events-none"
+                    >
+                      {reactions.get(idx)!.emoji}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 {isEmpty ? (
                   <div className="flex-1 flex flex-col items-center justify-center gap-1">
                     <span className="text-zinc-700 text-xl">+</span>
@@ -359,7 +465,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="text-xs">{seat.player!.avatar}</span>
                       <span className={`text-[10px] font-bold truncate ${isMe ? 'text-red-400' : 'text-zinc-400'}`}>
-                        {isMe ? 'You' : seat.player!.name}
+                        {seat.player!.name}
                       </span>
                       {isBot && <span className="text-[8px] text-zinc-600 font-mono">BOT</span>}
                     </div>
@@ -460,8 +566,15 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         {seated && phase === 'betting' && !hasBet && (
           <div className="space-y-3">
             <CountdownTimer totalSeconds={8} remainingSeconds={bettingTimeLeft} label="Betting closes in" />
+            {lastBet && balance >= lastBet && (
+              <button onClick={() => placeBet(lastBet)}
+                className="w-full bg-red-600/80 text-white py-3 text-sm font-bold tracking-widest uppercase hover:bg-red-600 transition-all"
+              >
+                SAME BET ${lastBet.toLocaleString()}
+              </button>
+            )}
             <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
-            <button onClick={placeBet} disabled={balance < bet}
+            <button onClick={() => placeBet()} disabled={balance < bet}
               className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               PLACE BET ${bet.toLocaleString()}
@@ -499,6 +612,26 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           <div className="text-center text-zinc-500 text-xs py-3 tracking-wider uppercase">playing next round...</div>
         )}
       </div>
+
+      {/* Reactions */}
+      {seated && (
+        <div className="flex items-center justify-center gap-2">
+          {[
+            { key: 'fire', emoji: '🔥' },
+            { key: 'skull', emoji: '💀' },
+            { key: 'party', emoji: '🎉' },
+            { key: 'shocked', emoji: '😱' },
+          ].map(r => (
+            <button
+              key={r.key}
+              onClick={() => sendReaction(r.key)}
+              className="w-10 h-10 flex items-center justify-center text-lg border border-white/[0.06] hover:border-white/20 hover:bg-white/5 transition-all"
+            >
+              {r.emoji}
+            </button>
+          ))}
+        </div>
+      )}
 
       <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
     </div>

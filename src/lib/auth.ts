@@ -247,3 +247,28 @@ export function removeFriend(email: string, friendUsername: string) {
     friends: (data.friends || []).filter((f) => f.username.toLowerCase() !== friendUsername.toLowerCase()),
   }));
 }
+
+export function sendMoney(fromEmail: string, toUsername: string, amount: number): string | true {
+  if (!amount || amount <= 0) return 'Enter a valid amount.';
+  const users = getUsers();
+  const fromKey = fromEmail.toLowerCase();
+  const sender = users[fromKey];
+  if (!sender) return 'Not logged in.';
+  if (sender.user.name.toLowerCase() === toUsername.toLowerCase()) return 'Cannot send to yourself.';
+  if (sender.casinoBalance < amount) return 'Insufficient balance.';
+
+  // Find recipient by username
+  let recipientKey: string | null = null;
+  for (const [email, data] of Object.entries(users)) {
+    if (data.user.name.toLowerCase() === toUsername.toLowerCase()) {
+      recipientKey = email;
+      break;
+    }
+  }
+  if (!recipientKey) return 'User not found.';
+
+  sender.casinoBalance -= amount;
+  users[recipientKey].casinoBalance += amount;
+  saveUsers(users);
+  return true;
+}

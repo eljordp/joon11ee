@@ -40,6 +40,8 @@ export default class DominoesServer implements Party.Server {
   state: DomState;
   turnTimer: ReturnType<typeof setInterval> | null = null;
   timers: ReturnType<typeof setTimeout>[] = [];
+  roomPassword: string | null = null;
+  hostId: string | null = null;
 
   constructor(readonly room: Party.Room) {
     this.state = {
@@ -72,6 +74,10 @@ export default class DominoesServer implements Party.Server {
       this.state.readyPlayers = [];
       this.broadcastState();
     }
+    if (this.players.size === 0) {
+      this.roomPassword = null;
+      this.hostId = null;
+    }
   }
 
   onMessage(message: string, sender: Party.Connection) {
@@ -86,9 +92,17 @@ export default class DominoesServer implements Party.Server {
   }
 
   private handleJoin(conn: Party.Connection, data: Record<string, unknown>) {
+    if (!this.hostId && data.password) this.roomPassword = String(data.password);
+    if (this.roomPassword && conn.id !== this.hostId) {
+      if (String(data.password || "") !== this.roomPassword) {
+        conn.send(JSON.stringify({ type: "auth_error", message: "Wrong password" }));
+        return;
+      }
+    }
     if (this.players.size >= 4) return;
     const player: Player = { id: conn.id, name: (data.name as string) || 'Anon', avatar: (data.avatar as string) || '🎮' };
     this.players.set(conn.id, player);
+    if (!this.hostId) this.hostId = conn.id;
     if (!this.state.playerOrder.includes(conn.id)) this.state.playerOrder.push(conn.id);
     if (!this.state.scores[conn.id]) this.state.scores[conn.id] = 0;
     this.broadcast({ type: 'player_joined', player });

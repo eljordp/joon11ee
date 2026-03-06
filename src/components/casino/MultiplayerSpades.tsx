@@ -84,18 +84,22 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
   const [myId, setMyId] = useState<string | null>(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(0);
   const [selectedBid, setSelectedBid] = useState(3);
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
+  const passwordRef = useRef<string | undefined>(undefined);
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
+    passwordRef.current = password;
+    setAuthError(undefined);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'spades', room: id });
     ws.addEventListener('open', () => {
       setConnected(true); setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '♠️' }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '♠️', password: passwordRef.current }));
     });
     ws.addEventListener('message', (evt) => handleServerMessage(JSON.parse(evt.data), ws.id));
     ws.addEventListener('close', () => setConnected(false));
@@ -142,13 +146,18 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
         }]);
         break;
       }
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        setConnected(false);
+        break;
+      }
     }
   }, [onWin, onLose]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
-  const createRoom = useCallback(() => connectToRoom(generateRoomCode()), [connectToRoom]);
-  const joinRoom = useCallback((code: string) => connectToRoom(code), [connectToRoom]);
+  const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
+  const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
@@ -173,7 +182,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           <h3 className="text-xl font-bold text-white">Spades</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play spades</p>
           <p className="text-zinc-700 text-xs">Exactly 4 players, 2v2 teams</p>
@@ -223,7 +232,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
         <span className="text-zinc-600 text-xs">Round #{roundNumber} · Trick {trickNumber}/13</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2 space-y-3">

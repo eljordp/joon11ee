@@ -168,6 +168,15 @@ export const sounds = {
     playTone(2400, 0.03, 'sine', 0.05, 0.05);
   },
 
+  // Hot streak celebration
+  hotStreak() {
+    playTone(523, 0.1, 'sine', 0.15);
+    playTone(659, 0.1, 'sine', 0.15, 0.08);
+    playTone(784, 0.1, 'sine', 0.18, 0.16);
+    playTone(1047, 0.15, 'sine', 0.2, 0.24);
+    playTone(1319, 0.2, 'sine', 0.22, 0.35);
+  },
+
   // Domino tile placement
   tilePlace() {
     playTone(400, 0.08, 'sine', 0.12);

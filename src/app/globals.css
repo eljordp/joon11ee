@@ -72,13 +72,15 @@ body {
   pointer-events: none;
   z-index: 99999;
   will-change: transform;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: width 0.15s ease, height 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 
 .cursor-dot.hovering {
   width: 16px;
   height: 16px;
   background: #EF4444;
-  transition: width 0.15s ease, height 0.15s ease, background 0.15s ease;
 }
 
 /* Animations */

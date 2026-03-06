@@ -20,6 +20,7 @@ interface Props {
   username?: string;
   initialRoom?: string | null;
   gameId?: string;
+  onPlayersChange?: (players: { name: string }[]) => void;
 }
 
 interface HoodBet { type: 'seven' | 'ten' | 'over' | 'under' | 'doubles'; amount: number; }
@@ -57,7 +58,7 @@ const BET_TEXT_COLORS: Record<string, string> = {
   doubles: 'text-yellow-400',
 };
 
-export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
+export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId, onPlayersChange }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -67,19 +68,23 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
   const [myId, setMyId] = useState<string | null>(null);
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean | null } | null>(null);
   const [diceRolling, setDiceRolling] = useState(false);
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
+  const passwordRef = useRef<string | undefined>(undefined);
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
+    passwordRef.current = password;
+    setAuthError(undefined);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'hood-craps', room: id });
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲' }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current }));
     });
     ws.addEventListener('message', (evt) => {
       const data = JSON.parse(evt.data);
@@ -128,7 +133,12 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         }
         break;
       }
-      case 'players': setPlayerCount((data.players as unknown[]).length); break;
+      case 'players': {
+        const players = data.players as Array<{ name: string }>;
+        setPlayerCount(players.length);
+        onPlayersChange?.(players.map(p => ({ name: p.name })));
+        break;
+      }
       case 'dice_roll': {
         setDiceRolling(true);
         sounds.diceRoll();
@@ -145,13 +155,18 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         }]);
         break;
       }
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        setConnected(false);
+        break;
+      }
     }
   }, [onWin, onLose, onLeaderboardEntry]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
-  const createRoom = useCallback(() => connectToRoom(generateRoomCode()), [connectToRoom]);
-  const joinRoom = useCallback((code: string) => connectToRoom(code), [connectToRoom]);
+  const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
+  const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
@@ -181,7 +196,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
           <span className="text-[10px] font-bold px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 tracking-wider uppercase">7s n 10s</span>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play</p>
           <p className="text-zinc-700 text-xs">Street dice. 7s n 10s. No cap.</p>
@@ -207,7 +222,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
 
       {/* Roll history */}
       {rollHistory.length > 0 && (

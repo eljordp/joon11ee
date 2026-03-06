@@ -82,6 +82,8 @@ export default class BlackjackServer implements Party.Server {
   countdownInterval: ReturnType<typeof setInterval> | null = null;
   botsSpawned = false;
   hostId: string | null = null;
+  roomPassword: string | null = null;
+  lastBets = new Map<string, number>(); // playerId -> last bet amount
 
   constructor(readonly room: Party.Room) {
     this.state = this.emptyState();
@@ -151,6 +153,8 @@ export default class BlackjackServer implements Party.Server {
       this.stopAllTimers();
       this.removeBots();
       this.hostId = null;
+      this.roomPassword = null;
+      this.lastBets.clear();
       this.state = this.emptyState();
     }
   }
@@ -166,15 +170,31 @@ export default class BlackjackServer implements Party.Server {
       case "hit": this.handleHit(sender); break;
       case "stand": this.handleStand(sender); break;
       case "double": this.handleDouble(sender); break;
+      case "rebet": this.handleRebet(sender); break;
       case "add_bot": this.handleAddBot(sender); break;
       case "remove_bot": this.handleRemoveBot(sender, data); break;
       case "chat": this.handleChat(sender, data); break;
+      case "reaction": this.handleReaction(sender, data); break;
     }
   }
 
   // === Handlers ===
 
   private handleJoin(conn: Party.Connection, data: Record<string, unknown>) {
+    // First player sets password (if provided)
+    if (!this.hostId && data.password) {
+      this.roomPassword = String(data.password);
+    }
+
+    // Subsequent players must match password
+    if (this.roomPassword && conn.id !== this.hostId) {
+      const pw = data.password ? String(data.password) : "";
+      if (pw !== this.roomPassword) {
+        conn.send(JSON.stringify({ type: "auth_error", message: "Wrong password" }));
+        return;
+      }
+    }
+
     const player: Player = {
       id: conn.id,
       name: (data.name as string) || "Anon",
@@ -278,6 +298,9 @@ export default class BlackjackServer implements Party.Server {
     seat.bet *= 2;
     this.dealToSeat(seatIdx);
     seat.status = seat.handValue > 21 ? "busted" : "stood";
+    if (seat.player && !seat.player.isBot) {
+      this.broadcastSystemChat(`${seat.player.name} doubled down for $${seat.bet}! 💰`);
+    }
     this.broadcastState();
     this.advanceToNextTurn();
   }
@@ -288,6 +311,30 @@ export default class BlackjackServer implements Party.Server {
     const text = String(data.text || "").slice(0, 100);
     if (!text) return;
     this.broadcast({ type: "chat", playerId: conn.id, playerName: player.name, avatar: player.avatar, text });
+  }
+
+  private handleRebet(conn: Party.Connection) {
+    if (this.state.phase !== "betting") return;
+    const seatIdx = this.seatMap.get(conn.id);
+    if (seatIdx === undefined) return;
+    const seat = this.state.seats[seatIdx];
+    if (!seat.player || seat.status === "betting") return;
+    const lastBet = this.lastBets.get(conn.id);
+    if (!lastBet) return;
+    seat.bet = lastBet;
+    seat.status = "betting";
+    this.broadcastState();
+    this.checkAllBetsIn();
+  }
+
+  private handleReaction(conn: Party.Connection, data: Record<string, unknown>) {
+    const player = this.players.get(conn.id);
+    if (!player) return;
+    const seatIdx = this.seatMap.get(conn.id);
+    if (seatIdx === undefined) return;
+    const emoji = String(data.emoji || "").slice(0, 4);
+    if (!emoji) return;
+    this.broadcast({ type: "reaction", seatIndex: seatIdx, emoji, playerId: conn.id });
   }
 
   private handleAddBot(conn: Party.Connection) {
@@ -520,12 +567,16 @@ export default class BlackjackServer implements Party.Server {
     this.state.phase = "dealing";
     this.deck = createDeck();
 
-    // Deal 2 cards to each bettor
+    // Deal 2 cards to each bettor, track last bets
     for (const seat of this.state.seats) {
       if (seat.player && seat.bet > 0) {
+        if (!seat.player.isBot) this.lastBets.set(seat.player.id, seat.bet);
         this.dealToSeat(seat.index);
         this.dealToSeat(seat.index);
-        if (seat.handValue === 21) seat.status = "blackjack";
+        if (seat.handValue === 21) {
+          seat.status = "blackjack";
+          if (seat.player) this.broadcastSystemChat(`${seat.player.name} hit BLACKJACK! 🃏`);
+        }
       }
     }
 
@@ -636,6 +687,10 @@ export default class BlackjackServer implements Party.Server {
     const dVal = handValue(this.state.dealerHand);
     const dealerBust = dVal > 21;
 
+    if (dealerBust) {
+      this.broadcastSystemChat(`Dealer busts with ${dVal}! 💥`);
+    }
+
     for (const seat of this.state.seats) {
       if (!seat.player || seat.bet === 0 || seat.hand.length === 0) continue;
       seat.status = "done";
@@ -654,6 +709,11 @@ export default class BlackjackServer implements Party.Server {
       } else {
         seat.profit = -seat.bet;
       }
+
+      // System chat for big wins
+      if (seat.profit >= 500 && seat.player && !seat.player.isBot) {
+        this.broadcastSystemChat(`${seat.player.name} won $${seat.profit}! 🔥`);
+      }
     }
 
     this.broadcastState();
@@ -668,6 +728,10 @@ export default class BlackjackServer implements Party.Server {
   }
 
   // === Helpers ===
+
+  private broadcastSystemChat(text: string) {
+    this.broadcast({ type: "chat", chatType: "system", playerId: "system", playerName: "Dealer", avatar: "🃏", text });
+  }
 
   private dealToSeat(seatIdx: number) {
     const seat = this.state.seats[seatIdx];

@@ -53,6 +53,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
   const [myId, setMyId] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | undefined>();
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -63,8 +64,12 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
   // Keep playerName in sync with username prop
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string) => {
+  const passwordRef = useRef<string | undefined>(undefined);
+
+  const connectToRoom = useCallback((id: string, password?: string) => {
     if (wsRef.current) wsRef.current.close();
+    passwordRef.current = password;
+    setAuthError(undefined);
 
     const ws = new PartySocket({
       host: PARTYKIT_HOST,
@@ -75,7 +80,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮' }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password: passwordRef.current }));
     });
 
     ws.addEventListener('message', (evt) => {
@@ -192,6 +197,12 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         // Handled via state updates
         break;
       }
+
+      case 'auth_error': {
+        setAuthError(data.message as string);
+        setConnected(false);
+        break;
+      }
     }
   }, [onWin, onLose]);
 
@@ -203,13 +214,12 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     };
   }, []);
 
-  const createRoom = useCallback(() => {
-    const code = generateRoomCode();
-    connectToRoom(code);
+  const createRoom = useCallback((code?: string, password?: string) => {
+    connectToRoom(code || generateRoomCode(), password);
   }, [connectToRoom]);
 
-  const joinRoom = useCallback((code: string) => {
-    connectToRoom(code);
+  const joinRoom = useCallback((code: string, password?: string) => {
+    connectToRoom(code, password);
   }, [connectToRoom]);
 
   const leaveRoom = useCallback(() => {
@@ -264,6 +274,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
           connected={false}
           gameId={gameId}
           initialRoom={initialRoom || undefined}
+          authError={authError}
         />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer crash</p>
@@ -316,6 +327,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         connected={connected}
         gameId={gameId}
         initialRoom={initialRoom || undefined}
+        authError={authError}
       />
 
       {/* History pills */}

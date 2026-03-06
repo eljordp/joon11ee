@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getBalance, addBalance, subtractBalance, resetBalance, setBalance as setCasinoBalance, getUsername, setUsername as saveUsername } from '@/lib/casino';
-import { getSession, recordCasinoGame, updateCasinoBalance, type UserData } from '@/lib/auth';
+import { getSession, recordCasinoGame, updateCasinoBalance, sendMoney, type UserData } from '@/lib/auth';
+import BreakBread from '@/components/casino/BreakBread';
 import SlotMachine from '@/components/casino/SlotMachine';
 import Roulette from '@/components/casino/Roulette';
 import Blackjack from '@/components/casino/Blackjack';
@@ -18,12 +19,13 @@ import dynamic from 'next/dynamic';
 const MultiplayerCrash = dynamic(() => import('@/components/casino/MultiplayerCrash'), { ssr: false });
 const MultiplayerBlackjack = dynamic(() => import('@/components/casino/MultiplayerBlackjack'), { ssr: false });
 const MultiplayerCraps = dynamic(() => import('@/components/casino/MultiplayerCraps'), { ssr: false });
+const SoloCraps = dynamic(() => import('@/components/casino/SoloCraps'), { ssr: false });
 const MultiplayerDominoes = dynamic(() => import('@/components/casino/MultiplayerDominoes'), { ssr: false });
 const MultiplayerPoker = dynamic(() => import('@/components/casino/MultiplayerPoker'), { ssr: false });
 const MultiplayerSpades = dynamic(() => import('@/components/casino/MultiplayerSpades'), { ssr: false });
 const MultiplayerHoodCraps = dynamic(() => import('@/components/casino/MultiplayerHoodCraps'), { ssr: false });
 
-type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades' | 'mp_hood_craps';
+type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'solo_craps' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades' | 'mp_hood_craps';
 
 interface LeaderboardEntry {
   player: string;
@@ -41,7 +43,8 @@ const GAMES: { id: Game; name: string; emoji: string; desc: string; live?: boole
   { id: 'crossy', name: 'Crossy', emoji: '🐔', desc: 'Cross the road alive' },
   { id: 'mp_crash', name: 'Crash MP', emoji: '🚀', desc: 'Multiplayer crash', live: true },
   { id: 'mp_blackjack', name: 'Table BJ', emoji: '🃏', desc: '5-seat table', live: true },
-  { id: 'mp_craps', name: 'Craps', emoji: '🎲', desc: 'Roll the bones', live: true },
+  { id: 'solo_craps', name: 'Craps', emoji: '🎲', desc: 'Solo w/ bots' },
+  { id: 'mp_craps', name: 'Craps MP', emoji: '🎲', desc: 'Live tables', live: true },
   { id: 'mp_dominoes', name: 'Dominoes', emoji: '🁣', desc: 'Play to 100', live: true },
   { id: 'mp_poker', name: 'Poker', emoji: '🂡', desc: "Texas Hold'em", live: true },
   { id: 'mp_spades', name: 'Spades', emoji: '♠️', desc: '2v2 teams', live: true },
@@ -70,6 +73,8 @@ export default function CasinoPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [initialRoom, setInitialRoom] = useState<string | null>(null);
+  const [breadOpen, setBreadOpen] = useState(false);
+  const [tablePlayers, setTablePlayers] = useState<{ name: string }[]>([]);
   const searchParams = useSearchParams();
 
   // Read invite link params on mount
@@ -200,6 +205,17 @@ export default function CasinoPage() {
     setNameInput('');
   };
 
+  const handleSendMoney = useCallback((toUsername: string, amount: number): string | true => {
+    if (!user) return 'Not logged in.';
+    const result = sendMoney(user.user.email, toUsername, amount);
+    if (result === true) {
+      const newBal = balance - amount;
+      setBalance(newBal);
+      setCasinoBalance(newBal);
+    }
+    return result;
+  }, [user, balance]);
+
   return (
     <div className="min-h-screen bg-black pt-24 md:pt-32 pb-20">
       {/* Background effects */}
@@ -292,6 +308,14 @@ export default function CasinoPage() {
                 </button>
               )}
               {user && (
+                <button
+                  onClick={() => setBreadOpen(true)}
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-white/10 text-zinc-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase hover:text-white transition-all"
+                >
+                  🍞
+                </button>
+              )}
+              {user && (
                 <Link
                   href="/profile"
                   className="px-2 sm:px-3 py-1.5 sm:py-2 border border-white/10 text-zinc-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase hover:text-white transition-all"
@@ -322,7 +346,7 @@ export default function CasinoPage() {
           {GAMES.map((game) => (
             <button
               key={game.id}
-              onClick={() => setActiveGame(game.id)}
+              onClick={() => { setActiveGame(game.id); setTablePlayers([]); }}
               className={`flex-shrink-0 w-[72px] sm:w-auto p-2.5 sm:p-5 text-center transition-all duration-300 relative ${
                 activeGame === game.id
                   ? game.live
@@ -373,22 +397,25 @@ export default function CasinoPage() {
               <MultiplayerCrash balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_crash" />
             )}
             {activeGame === 'mp_blackjack' && (
-              <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_blackjack" />
+              <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_blackjack" onPlayersChange={setTablePlayers} />
+            )}
+            {activeGame === 'solo_craps' && (
+              <SoloCraps balance={balance} onWin={handleWin} onLose={handleLose} />
             )}
             {activeGame === 'mp_craps' && (
-              <MultiplayerCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_craps" />
+              <MultiplayerCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_craps" onPlayersChange={setTablePlayers} />
             )}
             {activeGame === 'mp_dominoes' && (
               <MultiplayerDominoes balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_dominoes" />
             )}
             {activeGame === 'mp_poker' && (
-              <MultiplayerPoker balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_poker" />
+              <MultiplayerPoker balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_poker" onPlayersChange={setTablePlayers} />
             )}
             {activeGame === 'mp_spades' && (
               <MultiplayerSpades balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_spades" />
             )}
             {activeGame === 'mp_hood_craps' && (
-              <MultiplayerHoodCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_hood_craps" />
+              <MultiplayerHoodCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_hood_craps" onPlayersChange={setTablePlayers} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -462,6 +489,15 @@ export default function CasinoPage() {
       </div>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuth={handleAuth} required={!user} />
+      <BreakBread
+        open={breadOpen}
+        onClose={() => setBreadOpen(false)}
+        balance={balance}
+        onSend={handleSendMoney}
+        friends={user?.friends}
+        tablePlayers={tablePlayers}
+        myUsername={getDisplayName()}
+      />
     </div>
   );
 }
