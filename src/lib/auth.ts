@@ -71,12 +71,52 @@ export function login(email: string, password: string): UserData | string {
   return users[key];
 }
 
+// Migrate bad date entries (e.g. 2026-03-06 recorded on Mar 5 due to timezone bug)
+function migrateBadDates(data: UserData): UserData {
+  const BAD_DATES: Record<string, string> = { '2026-03-06': '2026-03-05' };
+  let changed = false;
+
+  for (const [bad, correct] of Object.entries(BAD_DATES)) {
+    const badIdx = data.casinoStats.findIndex((s) => s.date === bad);
+    if (badIdx === -1) continue;
+    changed = true;
+    const badEntry = data.casinoStats[badIdx];
+    const goodIdx = data.casinoStats.findIndex((s) => s.date === correct);
+
+    if (goodIdx !== -1) {
+      // Merge into correct date
+      const g = data.casinoStats[goodIdx];
+      g.gamesPlayed += badEntry.gamesPlayed;
+      g.totalWagered += badEntry.totalWagered;
+      g.totalWon += badEntry.totalWon;
+      g.netProfit += badEntry.netProfit;
+      g.biggestWin = Math.max(g.biggestWin, badEntry.biggestWin);
+      g.biggestLoss = Math.max(g.biggestLoss, badEntry.biggestLoss);
+    } else {
+      // Just fix the date
+      badEntry.date = correct;
+    }
+    if (goodIdx !== -1) data.casinoStats.splice(badIdx, 1);
+  }
+
+  return changed ? data : data;
+}
+
 export function getSession(): UserData | null {
   if (typeof window === 'undefined') return null;
   const key = sessionStorage.getItem(SESSION_KEY);
   if (!key) return null;
   const users = getUsers();
-  return users[key] || null;
+  if (!users[key]) return null;
+
+  // Run migration on load
+  const hasBad = users[key].casinoStats.some((s) => s.date === '2026-03-06');
+  if (hasBad) {
+    users[key] = migrateBadDates(users[key]);
+    saveUsers(users);
+  }
+
+  return users[key];
 }
 
 export function logout() {
