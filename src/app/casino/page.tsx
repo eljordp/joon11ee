@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getBalance, addBalance, subtractBalance, resetBalance, setBalance as setCasinoBalance, getUsername, setUsername as saveUsername } from '@/lib/casino';
 import { getSession, recordCasinoGame, updateCasinoBalance, type UserData } from '@/lib/auth';
@@ -68,6 +69,24 @@ export default function CasinoPage() {
   const [username, setUsernameState] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [initialRoom, setInitialRoom] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  // Read invite link params on mount
+  useEffect(() => {
+    const gameParam = searchParams.get('game') as Game | null;
+    const roomParam = searchParams.get('room');
+    if (gameParam && GAMES.some(g => g.id === gameParam)) {
+      setActiveGame(gameParam);
+    }
+    if (roomParam) {
+      setInitialRoom(roomParam.toUpperCase());
+    }
+    // Clean URL after reading params
+    if (gameParam || roomParam) {
+      window.history.replaceState({}, '', '/casino');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     setBalance(getBalance());
@@ -349,25 +368,25 @@ export default function CasinoPage() {
               <CrossyRoad balance={balance} onWin={handleWin} onLose={handleLose} />
             )}
             {activeGame === 'mp_crash' && (
-              <MultiplayerCrash balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerCrash balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_crash" />
             )}
             {activeGame === 'mp_blackjack' && (
-              <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_blackjack" />
             )}
             {activeGame === 'mp_craps' && (
-              <MultiplayerCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_craps" />
             )}
             {activeGame === 'mp_dominoes' && (
-              <MultiplayerDominoes balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerDominoes balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_dominoes" />
             )}
             {activeGame === 'mp_poker' && (
-              <MultiplayerPoker balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerPoker balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_poker" />
             )}
             {activeGame === 'mp_spades' && (
-              <MultiplayerSpades balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerSpades balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_spades" />
             )}
             {activeGame === 'mp_hood_craps' && (
-              <MultiplayerHoodCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+              <MultiplayerHoodCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} initialRoom={initialRoom} gameId="mp_hood_craps" />
             )}
           </motion.div>
         </AnimatePresence>

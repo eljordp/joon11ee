@@ -19,6 +19,8 @@ interface Props {
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
+  initialRoom?: string | null;
+  gameId?: string;
 }
 
 interface SeatData {
@@ -75,7 +77,7 @@ function PokerCard({ card, hidden, index, small }: { card: Card; hidden?: boolea
   );
 }
 
-export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
+export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -186,7 +188,7 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
           <h3 className="text-xl font-bold text-white">Texas Hold&apos;em</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play poker</p>
           <p className="text-zinc-700 text-xs">2-8 players, Texas Hold&apos;em</p>
@@ -214,7 +216,7 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
         <span className="text-zinc-600 text-xs">Hand #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2 space-y-3">

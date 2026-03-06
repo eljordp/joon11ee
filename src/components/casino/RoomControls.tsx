@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -10,6 +10,8 @@ interface Props {
   onLeaveRoom: () => void;
   playerCount: number;
   connected: boolean;
+  gameId?: string;
+  initialRoom?: string;
 }
 
 function generateRoomCode(): string {
@@ -21,16 +23,35 @@ function generateRoomCode(): string {
 
 export { generateRoomCode };
 
-export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeaveRoom, playerCount, connected }: Props) {
+export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeaveRoom, playerCount, connected, gameId, initialRoom }: Props) {
   const [joinInput, setJoinInput] = useState('');
   const [showJoin, setShowJoin] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const autoJoinedRef = useRef(false);
+
+  // Auto-join room from invite link
+  useEffect(() => {
+    if (initialRoom && !connected && !autoJoinedRef.current) {
+      autoJoinedRef.current = true;
+      onJoinRoom(initialRoom);
+    }
+  }, [initialRoom, connected, onJoinRoom]);
 
   const copyCode = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId).catch(() => {});
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const copyInviteLink = () => {
+    if (roomId && gameId) {
+      const url = `${window.location.origin}/casino?game=${gameId}&room=${roomId}`;
+      navigator.clipboard.writeText(url).catch(() => {});
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
     }
   };
 
@@ -58,8 +79,16 @@ export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeave
             </AnimatePresence>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-zinc-500 text-[10px]">{playerCount} player{playerCount !== 1 ? 's' : ''}</span>
+          {gameId && (
+            <button
+              onClick={copyInviteLink}
+              className="px-3 py-1.5 border border-green-600/30 text-green-400 text-[10px] font-bold tracking-wider uppercase hover:bg-green-600/10 transition-all"
+            >
+              {copiedInvite ? 'Copied!' : 'Invite'}
+            </button>
+          )}
           <button
             onClick={onLeaveRoom}
             className="px-3 py-1.5 border border-red-600/30 text-red-400 text-[10px] font-bold tracking-wider uppercase hover:bg-red-600/10 transition-all"

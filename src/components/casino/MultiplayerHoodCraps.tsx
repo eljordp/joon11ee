@@ -18,6 +18,8 @@ interface Props {
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
+  initialRoom?: string | null;
+  gameId?: string;
 }
 
 interface HoodBet { type: 'seven' | 'ten' | 'over' | 'under' | 'doubles'; amount: number; }
@@ -55,7 +57,7 @@ const BET_TEXT_COLORS: Record<string, string> = {
   doubles: 'text-yellow-400',
 };
 
-export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
+export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -179,7 +181,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
           <span className="text-[10px] font-bold px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 tracking-wider uppercase">7s n 10s</span>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play</p>
           <p className="text-zinc-700 text-xs">Street dice. 7s n 10s. No cap.</p>
@@ -205,7 +207,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
 
       {/* Roll history */}
       {rollHistory.length > 0 && (

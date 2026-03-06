@@ -18,6 +18,8 @@ interface Props {
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
+  initialRoom?: string | null;
+  gameId?: string;
 }
 
 interface CrapsBet { type: 'pass' | 'dont_pass' | 'field' | 'place'; amount: number; placeNumber?: number; }
@@ -54,7 +56,7 @@ function getOutcomeLabel(total: number, point: number | null): { text: string; c
 
 const PLACE_ODDS_DISPLAY: Record<number, string> = { 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5' };
 
-export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
+export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -201,7 +203,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           <h3 className="text-xl font-bold text-white">Craps</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-10 text-center">
           <div className="text-5xl mb-4">🎲</div>
           <p className="text-zinc-400 text-sm font-bold mb-1">Roll the bones</p>
@@ -238,7 +240,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         </div>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
 
       {/* Roll history strip */}
       {rollHistory.length > 0 && (

@@ -19,6 +19,8 @@ interface Props {
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
+  initialRoom?: string | null;
+  gameId?: string;
 }
 
 interface ServerState {
@@ -37,7 +39,7 @@ interface ServerState {
   history: { crashPoint: number; roundNumber: number }[];
 }
 
-export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
+export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -260,6 +262,8 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
           onLeaveRoom={leaveRoom}
           playerCount={playerCount}
           connected={false}
+          gameId={gameId}
+          initialRoom={initialRoom || undefined}
         />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer crash</p>
@@ -310,6 +314,8 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         onLeaveRoom={leaveRoom}
         playerCount={playerCount}
         connected={connected}
+        gameId={gameId}
+        initialRoom={initialRoom || undefined}
       />
 
       {/* History pills */}

@@ -19,6 +19,8 @@ interface Props {
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
+  initialRoom?: string | null;
+  gameId?: string;
 }
 
 interface SeatState {
@@ -78,7 +80,7 @@ function PlayingCard({ card, hidden = false, index, small = false }: { card: Car
   );
 }
 
-export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderboardEntry, username }: Props) {
+export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [bet, setBet] = useState(100);
@@ -268,7 +270,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           <h3 className="text-xl font-bold text-white">Blackjack Table</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer blackjack</p>
           <p className="text-zinc-700 text-xs">Share the room code with friends — no bots, real players only</p>
@@ -292,7 +294,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} />
 
       <div className="border border-white/[0.06] bg-zinc-950/50 p-4 sm:p-6">
         {/* Dealer */}
