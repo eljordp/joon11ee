@@ -4,7 +4,11 @@
   "main": "party/crash.ts",
   "parties": {
     "crash": "party/crash.ts",
-    "blackjack": "party/blackjack.ts"
+    "blackjack": "party/blackjack.ts",
+    "craps": "party/craps.ts",
+    "dominoes": "party/dominoes.ts",
+    "poker": "party/poker.ts",
+    "spades": "party/spades.ts"
   },
   "compatibilityDate": "2024-09-01"
 }

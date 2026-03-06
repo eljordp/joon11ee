@@ -144,4 +144,34 @@ export const sounds = {
     playTone(880, 0.1, 'sine', 0.12);
     playTone(1100, 0.1, 'sine', 0.1, 0.1);
   },
+
+  // Dice rolling rattle
+  diceRoll() {
+    for (let i = 0; i < 6; i++) {
+      playNoise(0.04, 0.06 + Math.random() * 0.04);
+      playTone(300 + Math.random() * 400, 0.03, 'square', 0.04, i * 0.06);
+    }
+  },
+
+  // Dice landing thud
+  diceLand() {
+    playTone(180, 0.12, 'sine', 0.18);
+    playNoise(0.06, 0.1);
+    playTone(120, 0.08, 'triangle', 0.1, 0.04);
+  },
+
+  // Chip stacking
+  chipStack() {
+    playNoise(0.03, 0.08);
+    playTone(2200, 0.03, 'sine', 0.06, 0.01);
+    playNoise(0.03, 0.06);
+    playTone(2400, 0.03, 'sine', 0.05, 0.05);
+  },
+
+  // Domino tile placement
+  tilePlace() {
+    playTone(400, 0.08, 'sine', 0.12);
+    playNoise(0.04, 0.08);
+    playTone(300, 0.06, 'triangle', 0.08, 0.03);
+  },
 };

@@ -1,0 +1,353 @@
+import type * as Party from "partykit/server";
+
+interface Player {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
+interface CrapsBet {
+  type: 'pass' | 'dont_pass' | 'field' | 'place';
+  amount: number;
+  placeNumber?: number;
+}
+
+interface PlayerBets {
+  playerId: string;
+  playerName: string;
+  bets: CrapsBet[];
+}
+
+interface CrapsState {
+  phase: 'waiting' | 'betting' | 'rolling' | 'point_betting' | 'point_rolling' | 'results';
+  shooterId: string | null;
+  shooterOrder: string[];
+  point: number | null;
+  dice: [number, number];
+  diceTotal: number;
+  bettingTimeLeft: number;
+  roundNumber: number;
+  rollHistory: { dice: [number, number]; total: number }[];
+  results: { playerId: string; playerName: string; profit: number }[];
+}
+
+const BETTING_DURATION = 10;
+const RESULTS_DURATION = 3;
+const PLACE_ODDS: Record<number, [number, number]> = {
+  4: [9, 5], 5: [7, 5], 6: [7, 6], 8: [7, 6], 9: [7, 5], 10: [9, 5],
+};
+
+export default class CrapsServer implements Party.Server {
+  players = new Map<string, Player>();
+  playerBets = new Map<string, CrapsBet[]>();
+  state: CrapsState;
+  bettingTimer: ReturnType<typeof setInterval> | null = null;
+  timers: ReturnType<typeof setTimeout>[] = [];
+
+  constructor(readonly room: Party.Room) {
+    this.state = {
+      phase: 'waiting', shooterId: null, shooterOrder: [],
+      point: null, dice: [0, 0], diceTotal: 0,
+      bettingTimeLeft: 0, roundNumber: 0, rollHistory: [], results: [],
+    };
+  }
+
+  onConnect(conn: Party.Connection) {
+    conn.send(JSON.stringify({ type: 'state', state: this.getState() }));
+    conn.send(JSON.stringify({ type: 'players', players: [...this.players.values()] }));
+  }
+
+  onClose(conn: Party.Connection) {
+    const player = this.players.get(conn.id);
+    this.players.delete(conn.id);
+    this.playerBets.delete(conn.id);
+    this.state.shooterOrder = this.state.shooterOrder.filter(id => id !== conn.id);
+    if (this.state.shooterId === conn.id) {
+      this.state.shooterId = this.state.shooterOrder[0] || null;
+    }
+    if (player) {
+      this.broadcast({ type: 'player_left', playerId: conn.id, playerName: player.name });
+      this.broadcastPlayers();
+    }
+    if (this.players.size === 0) {
+      this.stopAllTimers();
+      this.state.phase = 'waiting';
+    }
+  }
+
+  onMessage(message: string, sender: Party.Connection) {
+    const data = JSON.parse(message);
+    switch (data.type) {
+      case 'join': this.handleJoin(sender, data); break;
+      case 'bet': this.handleBet(sender, data); break;
+      case 'roll': this.handleRoll(sender); break;
+      case 'chat': this.handleChat(sender, data); break;
+    }
+  }
+
+  private handleJoin(conn: Party.Connection, data: Record<string, unknown>) {
+    const player: Player = { id: conn.id, name: (data.name as string) || 'Anon', avatar: (data.avatar as string) || '🎮' };
+    this.players.set(conn.id, player);
+    if (!this.state.shooterOrder.includes(conn.id)) this.state.shooterOrder.push(conn.id);
+    this.broadcast({ type: 'player_joined', player });
+    this.broadcastPlayers();
+    if (this.state.phase === 'waiting' && this.players.size >= 1) this.startBetting();
+  }
+
+  private handleBet(conn: Party.Connection, data: Record<string, unknown>) {
+    if (this.state.phase !== 'betting' && this.state.phase !== 'point_betting') return;
+    const betType = data.betType as string;
+    const amount = data.amount as number;
+    if (!amount || amount <= 0) return;
+
+    const validTypes = ['pass', 'dont_pass', 'field', 'place'];
+    if (!validTypes.includes(betType)) return;
+
+    // Place bets only during point phase
+    if (betType === 'place' && this.state.phase !== 'point_betting' && this.state.point === null) return;
+    const placeNumber = data.placeNumber as number | undefined;
+    if (betType === 'place' && (!placeNumber || ![4, 5, 6, 8, 9, 10].includes(placeNumber))) return;
+
+    // Come-out only: pass/dont_pass. Point phase: field/place
+    if (this.state.phase === 'betting' && betType === 'place') return;
+
+    const bets = this.playerBets.get(conn.id) || [];
+    bets.push({ type: betType as CrapsBet['type'], amount, placeNumber });
+    this.playerBets.set(conn.id, bets);
+
+    const player = this.players.get(conn.id);
+    this.broadcast({ type: 'bet_placed', playerId: conn.id, playerName: player?.name || 'Anon', betType, amount, placeNumber });
+    this.broadcastState();
+  }
+
+  private handleRoll(conn: Party.Connection) {
+    if (this.state.phase !== 'rolling' && this.state.phase !== 'point_rolling') return;
+    if (conn.id !== this.state.shooterId) return;
+    this.rollDice();
+  }
+
+  private handleChat(conn: Party.Connection, data: Record<string, unknown>) {
+    const player = this.players.get(conn.id);
+    if (!player) return;
+    const text = String(data.text || '').slice(0, 100);
+    if (!text) return;
+    this.broadcast({ type: 'chat', playerId: conn.id, playerName: player.name, avatar: player.avatar, text });
+  }
+
+  private startBetting() {
+    this.state.phase = 'betting';
+    this.state.roundNumber++;
+    this.state.point = null;
+    this.state.results = [];
+    this.playerBets.clear();
+    if (!this.state.shooterId && this.state.shooterOrder.length > 0) {
+      this.state.shooterId = this.state.shooterOrder[0];
+    }
+    let remaining = BETTING_DURATION;
+    this.state.bettingTimeLeft = remaining;
+    this.broadcastState();
+    this.bettingTimer = setInterval(() => {
+      remaining--;
+      this.state.bettingTimeLeft = Math.max(0, remaining);
+      this.broadcast({ type: 'countdown', remaining });
+      if (remaining <= 0) {
+        this.clearBettingTimer();
+        this.state.phase = 'rolling';
+        this.broadcastState();
+      }
+    }, 1000);
+  }
+
+  private startPointBetting() {
+    this.state.phase = 'point_betting';
+    let remaining = BETTING_DURATION;
+    this.state.bettingTimeLeft = remaining;
+    this.broadcastState();
+    this.bettingTimer = setInterval(() => {
+      remaining--;
+      this.state.bettingTimeLeft = Math.max(0, remaining);
+      this.broadcast({ type: 'countdown', remaining });
+      if (remaining <= 0) {
+        this.clearBettingTimer();
+        this.state.phase = 'point_rolling';
+        this.broadcastState();
+      }
+    }, 1000);
+  }
+
+  private rollDice() {
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    const total = d1 + d2;
+    this.state.dice = [d1, d2];
+    this.state.diceTotal = total;
+    this.state.rollHistory.unshift({ dice: [d1, d2], total });
+    if (this.state.rollHistory.length > 20) this.state.rollHistory.pop();
+    this.broadcast({ type: 'dice_roll', dice: [d1, d2], total });
+
+    if (this.state.point === null) {
+      this.resolveComeOut(total);
+    } else {
+      this.resolvePointRoll(total);
+    }
+  }
+
+  private resolveComeOut(total: number) {
+    if (total === 7 || total === 11) {
+      // Pass wins, don't pass loses
+      this.resolveRound('pass_wins');
+    } else if (total === 2 || total === 3) {
+      // Craps: pass loses, don't pass wins
+      this.resolveRound('pass_loses');
+    } else if (total === 12) {
+      // Pass loses, don't pass pushes
+      this.resolveRound('pass_loses_dp_push');
+    } else {
+      // Point is set
+      this.state.point = total;
+      this.broadcast({ type: 'point_set', point: total });
+      this.resolveFieldBets(total);
+      this.startPointBetting();
+    }
+  }
+
+  private resolvePointRoll(total: number) {
+    if (total === this.state.point) {
+      this.resolveRound('point_hit');
+    } else if (total === 7) {
+      this.resolveRound('seven_out');
+    } else {
+      // Resolve field bets, place bets that hit
+      this.resolveFieldBets(total);
+      this.resolvePlaceBets(total);
+      this.broadcastState();
+      this.startPointBetting();
+    }
+  }
+
+  private resolveFieldBets(total: number) {
+    const fieldWins = [2, 3, 4, 9, 10, 11, 12].includes(total);
+    const doubleField = total === 2 || total === 12;
+    for (const [pid, bets] of this.playerBets) {
+      const newBets: CrapsBet[] = [];
+      for (const bet of bets) {
+        if (bet.type === 'field') {
+          const player = this.players.get(pid);
+          const pname = player?.name || 'Anon';
+          if (fieldWins) {
+            const profit = doubleField ? bet.amount * 2 : bet.amount;
+            this.addResult(pid, pname, profit);
+          } else {
+            this.addResult(pid, pname, -bet.amount);
+          }
+          // Field bets are one-roll, don't carry forward
+        } else {
+          newBets.push(bet);
+        }
+      }
+      this.playerBets.set(pid, newBets);
+    }
+  }
+
+  private resolvePlaceBets(total: number) {
+    for (const [pid, bets] of this.playerBets) {
+      const newBets: CrapsBet[] = [];
+      for (const bet of bets) {
+        if (bet.type === 'place' && bet.placeNumber === total) {
+          const player = this.players.get(pid);
+          const odds = PLACE_ODDS[total];
+          const profit = Math.floor(bet.amount * odds[0] / odds[1]);
+          this.addResult(pid, player?.name || 'Anon', profit);
+          // Place bet stays active until seven-out
+          newBets.push(bet);
+        } else {
+          newBets.push(bet);
+        }
+      }
+      this.playerBets.set(pid, newBets);
+    }
+  }
+
+  private resolveRound(outcome: string) {
+    for (const [pid, bets] of this.playerBets) {
+      const player = this.players.get(pid);
+      const pname = player?.name || 'Anon';
+      for (const bet of bets) {
+        if (bet.type === 'pass') {
+          if (outcome === 'pass_wins' || outcome === 'point_hit') this.addResult(pid, pname, bet.amount);
+          else this.addResult(pid, pname, -bet.amount);
+        } else if (bet.type === 'dont_pass') {
+          if (outcome === 'pass_loses' || outcome === 'seven_out') this.addResult(pid, pname, bet.amount);
+          else if (outcome === 'pass_loses_dp_push') { /* push */ }
+          else this.addResult(pid, pname, -bet.amount);
+        } else if (bet.type === 'field') {
+          // Already resolved per-roll
+        } else if (bet.type === 'place') {
+          if (outcome === 'seven_out') this.addResult(pid, pname, -bet.amount);
+          // point_hit: place bets just stay, no loss
+        }
+      }
+    }
+
+    // Resolve field on final roll
+    const total = this.state.diceTotal;
+    this.resolveFieldBets(total);
+
+    if (outcome === 'seven_out') {
+      // Rotate shooter
+      const idx = this.state.shooterOrder.indexOf(this.state.shooterId!);
+      const nextIdx = (idx + 1) % this.state.shooterOrder.length;
+      this.state.shooterId = this.state.shooterOrder[nextIdx];
+      const newShooter = this.players.get(this.state.shooterId);
+      this.broadcast({ type: 'shooter_change', newShooterId: this.state.shooterId, newShooterName: newShooter?.name || 'Anon' });
+    }
+
+    this.state.phase = 'results';
+    this.broadcast({ type: 'round_result', results: this.state.results });
+    this.broadcastState();
+
+    const t = setTimeout(() => {
+      if (this.players.size > 0) this.startBetting();
+      else this.state.phase = 'waiting';
+    }, RESULTS_DURATION * 1000);
+    this.timers.push(t);
+  }
+
+  private addResult(playerId: string, playerName: string, profit: number) {
+    const existing = this.state.results.find(r => r.playerId === playerId);
+    if (existing) existing.profit += profit;
+    else this.state.results.push({ playerId, playerName, profit });
+  }
+
+  private getState() {
+    const bets: PlayerBets[] = [];
+    for (const [pid, b] of this.playerBets) {
+      const player = this.players.get(pid);
+      bets.push({ playerId: pid, playerName: player?.name || 'Anon', bets: b });
+    }
+    return { ...this.state, playerBets: bets };
+  }
+
+  private broadcast(data: Record<string, unknown>) {
+    const msg = JSON.stringify(data);
+    for (const conn of this.room.getConnections()) conn.send(msg);
+  }
+
+  private broadcastState() {
+    this.broadcast({ type: 'state', state: this.getState() });
+  }
+
+  private broadcastPlayers() {
+    this.broadcast({ type: 'players', players: [...this.players.values()] });
+  }
+
+  private clearBettingTimer() {
+    if (this.bettingTimer) { clearInterval(this.bettingTimer); this.bettingTimer = null; }
+  }
+
+  private stopAllTimers() {
+    this.clearBettingTimer();
+    this.timers.forEach(t => clearTimeout(t));
+    this.timers = [];
+  }
+}

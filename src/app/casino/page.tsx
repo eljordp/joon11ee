@@ -16,8 +16,12 @@ import dynamic from 'next/dynamic';
 
 const MultiplayerCrash = dynamic(() => import('@/components/casino/MultiplayerCrash'), { ssr: false });
 const MultiplayerBlackjack = dynamic(() => import('@/components/casino/MultiplayerBlackjack'), { ssr: false });
+const MultiplayerCraps = dynamic(() => import('@/components/casino/MultiplayerCraps'), { ssr: false });
+const MultiplayerDominoes = dynamic(() => import('@/components/casino/MultiplayerDominoes'), { ssr: false });
+const MultiplayerPoker = dynamic(() => import('@/components/casino/MultiplayerPoker'), { ssr: false });
+const MultiplayerSpades = dynamic(() => import('@/components/casino/MultiplayerSpades'), { ssr: false });
 
-type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack';
+type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades';
 
 interface LeaderboardEntry {
   player: string;
@@ -35,6 +39,10 @@ const GAMES: { id: Game; name: string; emoji: string; desc: string; live?: boole
   { id: 'crossy', name: 'Crossy', emoji: '🐔', desc: 'Cross the road alive' },
   { id: 'mp_crash', name: 'Crash MP', emoji: '🚀', desc: 'Multiplayer crash', live: true },
   { id: 'mp_blackjack', name: 'Table BJ', emoji: '🃏', desc: '5-seat table', live: true },
+  { id: 'mp_craps', name: 'Craps', emoji: '🎲', desc: 'Roll the bones', live: true },
+  { id: 'mp_dominoes', name: 'Dominoes', emoji: '🁣', desc: 'Play to 100', live: true },
+  { id: 'mp_poker', name: 'Poker', emoji: '🂡', desc: "Texas Hold'em", live: true },
+  { id: 'mp_spades', name: 'Spades', emoji: '♠️', desc: '2v2 teams', live: true },
 ];
 
 function timeAgo(ts: number): string {
@@ -287,7 +295,7 @@ export default function CasinoPage() {
         </div>
 
         {/* Game selector */}
-        <div className="flex sm:grid sm:grid-cols-7 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
+        <div className="flex sm:grid sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-11 gap-2 sm:gap-3 mb-6 sm:mb-8 overflow-x-auto pb-2 sm:pb-0 -mx-6 px-6 sm:mx-0 sm:px-0 scrollbar-thin">
           {GAMES.map((game) => (
             <button
               key={game.id}
@@ -343,6 +351,18 @@ export default function CasinoPage() {
             )}
             {activeGame === 'mp_blackjack' && (
               <MultiplayerBlackjack balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+            )}
+            {activeGame === 'mp_craps' && (
+              <MultiplayerCraps balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+            )}
+            {activeGame === 'mp_dominoes' && (
+              <MultiplayerDominoes balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+            )}
+            {activeGame === 'mp_poker' && (
+              <MultiplayerPoker balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
+            )}
+            {activeGame === 'mp_spades' && (
+              <MultiplayerSpades balance={balance} onWin={handleWin} onLose={handleLose} onLeaderboardEntry={handleLeaderboardEntry} username={getDisplayName()} />
             )}
           </motion.div>
         </AnimatePresence>
