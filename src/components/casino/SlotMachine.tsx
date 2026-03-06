@@ -30,7 +30,7 @@ function generateReelStrip(): string[] {
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
 }
 
@@ -109,7 +109,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       const p = PAYOUTS[symbols[0]];
       const winAmount = bet * p.mult;
       sounds.jackpot();
-      onWin(winAmount);
+      onWin(winAmount, bet);
       setStreak((s) => s + 1);
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
@@ -121,7 +121,7 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
     } else if (symbols[0] === symbols[1] || symbols[1] === symbols[2] || symbols[0] === symbols[2]) {
       const winAmount = Math.floor(bet * 2);
       sounds.win();
-      onWin(winAmount);
+      onWin(winAmount, bet);
       setStreak((s) => s + 1);
       setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'PAIR — 2x', win: true });
     } else {

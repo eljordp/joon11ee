@@ -15,7 +15,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -157,7 +157,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         if (data.playerId === selfId) {
           sounds.win();
           const profit = data.profit as number;
-          onWin(profit);
+          onWin(profit, bet);
           setHasCashed(true);
           setResult({ text: `+$${profit.toLocaleString()}`, sub: `cashed at ${(data.multiplier as number).toFixed(2)}x`, win: true });
           if ((data.multiplier as number) >= 5) sounds.jackpot();

@@ -8,7 +8,7 @@ import BetControls from './BetControls';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
 }
 
@@ -221,14 +221,14 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         if (dVal > 21) {
           const winAmount = actualBet * 2;
           sounds.win();
-          onWin(winAmount);
+          onWin(winAmount, actualBet);
           setWins((w) => w + 1);
           setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'dealer busted', win: true });
         } else if (pVal > dVal) {
           const isBlackjack = pVal === 21 && pHand.length === 2;
           const winAmount = isBlackjack ? Math.floor(actualBet * 2.5) : actualBet * 2;
           if (isBlackjack) sounds.jackpot(); else sounds.win();
-          onWin(winAmount);
+          onWin(winAmount, actualBet);
           setWins((w) => w + 1);
           setResult({
             text: `+$${winAmount.toLocaleString()}`,

@@ -105,7 +105,7 @@ export default function CasinoPage() {
     return 'You';
   }, [username, user]);
 
-  const handleWin = useCallback((amount: number) => {
+  const handleWin = useCallback((amount: number, wagered?: number) => {
     const newBal = addBalance(amount);
     setBalance(newBal);
     setTotalSession((t) => t + amount);
@@ -123,7 +123,7 @@ export default function CasinoPage() {
       return [...lb, entry].sort((a, b) => b.amount - a.amount).slice(0, 20);
     });
     if (user) {
-      recordCasinoGame(user.user.email, 0, amount);
+      recordCasinoGame(user.user.email, wagered || 0, amount);
       updateCasinoBalance(user.user.email, newBal);
     }
   }, [user, activeGame, getDisplayName]);

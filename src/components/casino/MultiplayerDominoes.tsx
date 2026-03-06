@@ -13,7 +13,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -104,7 +104,7 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
           if (state.phase === 'game_end') {
             if (state.winnerId === selfId) {
               sounds.jackpot();
-              onWin(state.scores[selfId] * 10);
+              onWin(state.scores[selfId] * 10, 0);
             } else {
               sounds.lose();
               onLose(100);

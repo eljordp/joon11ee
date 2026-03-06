@@ -7,7 +7,7 @@ import BetControls from './BetControls';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
 }
 
@@ -156,7 +156,7 @@ export default function CrossyRoad({ balance, onWin, onLose }: Props) {
     const winAmount = Math.floor(bet * multiplier);
     sounds.win();
     if (multiplier >= 3) sounds.jackpot();
-    onWin(winAmount);
+    onWin(winAmount, bet);
     setGameState('cashed');
     setResult({
       text: `+$${winAmount.toLocaleString()}`,

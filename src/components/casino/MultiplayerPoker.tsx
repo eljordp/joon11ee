@@ -15,7 +15,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -120,7 +120,7 @@ export default function MultiplayerPoker({ balance, onWin, onLose, onLeaderboard
                 const mySeat = state.seats.find(s => s.id === selfId);
                 const profit = myResult.potWon - (mySeat?.totalBetThisHand || 0);
                 if (profit > 0) {
-                  sounds.jackpot(); onWin(profit);
+                  sounds.jackpot(); onWin(profit, mySeat?.totalBetThisHand || 0);
                   setResult({ text: `+$${profit.toLocaleString()}`, sub: myResult.handDesc, win: true });
                 } else {
                   setResult({ text: myResult.handDesc, sub: 'won pot but broke even', win: null });

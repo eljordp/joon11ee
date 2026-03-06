@@ -7,7 +7,7 @@ import BetControls from './BetControls';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
 }
 
@@ -117,7 +117,7 @@ export default function Crash({ balance, onWin, onLose }: Props) {
     sounds.win();
     const winAmount = Math.floor(bet * multiplier);
     cashedAt.current = multiplier;
-    onWin(winAmount);
+    onWin(winAmount, bet);
     setGameState('coasting');
     setResult({
       text: `+$${winAmount.toLocaleString()}`,

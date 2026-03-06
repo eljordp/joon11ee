@@ -15,7 +15,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -155,7 +155,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
             if (mySeat && mySeat.bet > 0 && mySeat.hand.length > 0) {
               if (mySeat.profit > 0) {
                 sounds.win();
-                onWin(mySeat.profit + mySeat.bet);
+                onWin(mySeat.profit + mySeat.bet, mySeat.bet);
                 const isBJ = mySeat.handValue === 21 && mySeat.hand.length === 2;
                 setResult({ text: `+$${mySeat.profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: true });
                 if (isBJ) sounds.jackpot();

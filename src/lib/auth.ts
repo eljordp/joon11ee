@@ -96,7 +96,7 @@ export function recordCasinoGame(
   wagered: number,
   won: number,
 ) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
   const net = won - wagered;
 
   updateUserData(email, (data) => {

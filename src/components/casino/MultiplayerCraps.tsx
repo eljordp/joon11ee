@@ -14,7 +14,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -81,10 +81,11 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         if (state.phase !== prevPhaseRef.current) {
           if (state.phase === 'results') {
             const myResult = state.results.find(r => r.playerId === selfId);
+            const myBetTotal = state.playerBets.find(pb => pb.playerId === selfId)?.bets.reduce((sum, b) => sum + b.amount, 0) || 0;
             if (myResult) {
               if (myResult.profit > 0) {
                 sounds.win();
-                onWin(myResult.profit);
+                onWin(myResult.profit, myBetTotal);
                 setResult({ text: `+$${myResult.profit.toLocaleString()}`, sub: 'nice roll!', win: true });
               } else if (myResult.profit < 0) {
                 sounds.lose();

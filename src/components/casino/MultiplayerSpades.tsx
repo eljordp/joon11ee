@@ -14,7 +14,7 @@ const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
   onLeaderboardEntry?: (entry: { player: string; game: string; emoji: string; amount: number }) => void;
   username?: string;
@@ -117,7 +117,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
               const won = state.teamScores[myTeam] >= state.targetScore &&
                 state.teamScores[myTeam] >= state.teamScores[1 - myTeam];
               if (won) {
-                sounds.jackpot(); onWin(state.teamScores[myTeam] * 2);
+                sounds.jackpot(); onWin(state.teamScores[myTeam] * 2, 0);
               } else {
                 sounds.lose(); onLose(200);
               }

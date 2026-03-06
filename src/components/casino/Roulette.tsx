@@ -11,7 +11,7 @@ type BetType = 'red' | 'black' | 'green' | 'odd' | 'even' | 'low' | 'high';
 
 interface Props {
   balance: number;
-  onWin: (amount: number) => void;
+  onWin: (amount: number, wagered?: number) => void;
   onLose: (amount: number) => void;
 }
 
@@ -80,7 +80,7 @@ export default function Roulette({ balance, onWin, onLose }: Props) {
         if (won) {
           const winAmount = bet * option.payout;
           if (betType === 'green') sounds.jackpot(); else sounds.win();
-          onWin(winAmount);
+          onWin(winAmount, bet);
           setResult({
             text: `+$${winAmount.toLocaleString()}`,
             sub: betType === 'green' ? 'GREEN HIT 14x 🤑' : `${option.label} wins ${option.emoji}`,
