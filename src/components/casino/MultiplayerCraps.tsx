@@ -68,6 +68,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
+  const serverStateRef = useRef<ServerState | null>(null);
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
@@ -93,6 +94,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
       case 'state': {
         const state = data.state as ServerState;
         setServerState(state);
+        serverStateRef.current = state;
 
         if (state.phase !== prevPhaseRef.current) {
           if (state.phase === 'results') {
@@ -137,11 +139,8 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           sounds.diceLand();
           // Show outcome label after dice land
           const total = data.total as number;
-          const currentState = serverState;
-          if (currentState) {
-            const label = getOutcomeLabel(total, currentState.point);
-            if (label) setOutcomeLabel(label);
-          }
+          const label = getOutcomeLabel(total, serverStateRef.current?.point ?? null);
+          if (label) setOutcomeLabel(label);
         }, 800);
         break;
       }
@@ -162,7 +161,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         break;
       }
     }
-  }, [onWin, onLose, onLeaderboardEntry, serverState]);
+  }, [onWin, onLose, onLeaderboardEntry]);
 
   useEffect(() => { return () => { if (wsRef.current) wsRef.current.close(); }; }, []);
 
