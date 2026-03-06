@@ -44,6 +44,8 @@ interface ServerState {
   turnTimeLeft: number;
   roundNumber: number;
   bettingTimeLeft: number;
+  hostId: string | null;
+  botIds: string[];
 }
 
 function PlayingCard({ card, hidden = false, index, small = false }: { card: Card; hidden?: boolean; index: number; small?: boolean }) {
@@ -262,6 +264,14 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
   }, []);
 
+  const addBot = useCallback(() => {
+    wsRef.current?.send(JSON.stringify({ type: 'add_bot' }));
+  }, []);
+
+  const removeBot = useCallback((botId: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'remove_bot', botId }));
+  }, []);
+
   // Not connected
   if (!connected || !serverState) {
     return (
@@ -273,16 +283,18 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer blackjack</p>
-          <p className="text-zinc-700 text-xs">Share the room code with friends — no bots, real players only</p>
+          <p className="text-zinc-700 text-xs">Share the room code with friends or play with bots</p>
         </div>
       </div>
     );
   }
 
-  const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft } = serverState;
+  const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft, hostId, botIds } = serverState;
   const isMyTurn = mySeatIndex !== null && activeSeatIndex === mySeatIndex && phase === 'player_turns';
   const mySeat = mySeatIndex !== null ? seats[mySeatIndex] : null;
   const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= bet * 2;
+  const isHost = myId !== null && hostId === myId;
+  const botIdSet = new Set(botIds || []);
 
   return (
     <div className="space-y-3">
@@ -325,10 +337,11 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
             const isActive = activeSeatIndex === idx;
             const isMe = seat.player?.id === myId;
             const isEmpty = !seat.player;
+            const isBot = seat.player ? botIdSet.has(seat.player.id) : false;
 
             return (
               <div key={idx}
-                className={`border p-2 sm:p-3 min-h-[140px] sm:min-h-[200px] flex flex-col transition-all ${
+                className={`relative border p-2 sm:p-3 min-h-[140px] sm:min-h-[200px] flex flex-col transition-all ${
                   isActive ? 'border-yellow-500/50 bg-yellow-500/5 shadow-[0_0_15px_rgba(234,179,8,0.1)]' :
                   isMe ? 'border-red-600/30 bg-red-600/5' :
                   isEmpty ? 'border-dashed border-white/[0.06] hover:border-white/[0.12] cursor-pointer' :
@@ -348,7 +361,17 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                       <span className={`text-[10px] font-bold truncate ${isMe ? 'text-red-400' : 'text-zinc-400'}`}>
                         {isMe ? 'You' : seat.player!.name}
                       </span>
+                      {isBot && <span className="text-[8px] text-zinc-600 font-mono">BOT</span>}
                     </div>
+                    {isHost && isBot && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeBot(seat.player!.id); }}
+                        className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-red-400 text-[10px] font-bold transition-colors"
+                        title="Remove bot"
+                      >
+                        x
+                      </button>
+                    )}
                     {seat.bet > 0 && (
                       <div className="text-[10px] text-zinc-500 font-mono mb-1">
                         ${seat.bet.toLocaleString()}{seat.doubled && <span className="text-yellow-400 ml-1">2x</span>}
@@ -390,6 +413,19 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
             );
           })}
         </div>
+
+        {isHost && (
+          <div className="flex items-center justify-end gap-2 mt-2">
+            <span className="text-zinc-700 text-[9px] tracking-wider uppercase">Bots</span>
+            <button
+              onClick={addBot}
+              disabled={botIdSet.size >= 3 || seats.every((s) => s.player !== null)}
+              className="px-2 py-1 text-[10px] font-bold tracking-wider uppercase border border-white/10 text-zinc-400 hover:text-white hover:border-white/20 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+            >
+              + Add
+            </button>
+          </div>
+        )}
 
         {phase === 'player_turns' && activeSeatIndex !== null && (
           <div className="mt-3">

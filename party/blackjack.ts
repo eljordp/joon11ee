@@ -54,6 +54,8 @@ interface GameState {
   turnTimeLeft: number;
   roundNumber: number;
   bettingTimeLeft: number;
+  hostId: string | null;
+  botIds: string[];
 }
 
 // === Bot Config ===
@@ -79,6 +81,7 @@ export default class BlackjackServer implements Party.Server {
   timers: ReturnType<typeof setTimeout>[] = [];
   countdownInterval: ReturnType<typeof setInterval> | null = null;
   botsSpawned = false;
+  hostId: string | null = null;
 
   constructor(readonly room: Party.Room) {
     this.state = this.emptyState();
@@ -95,7 +98,15 @@ export default class BlackjackServer implements Party.Server {
       turnTimeLeft: 0,
       roundNumber: 0,
       bettingTimeLeft: BETTING_DURATION,
+      hostId: this.hostId,
+      botIds: this.getActiveBotIds(),
     };
+  }
+
+  private getActiveBotIds(): string[] {
+    return Array.from(this.seatMap.entries())
+      .filter(([id]) => this.players.get(id)?.isBot)
+      .map(([id]) => id);
   }
 
   private emptySeat(index: number): Seat {
@@ -128,11 +139,18 @@ export default class BlackjackServer implements Party.Server {
       this.broadcastState();
     }
 
+    // Transfer host if needed
+    if (conn.id === this.hostId) {
+      const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot);
+      this.hostId = realPlayers.length > 0 ? realPlayers[0].id : null;
+    }
+
     // Check if any real (non-bot) players remain
     const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot);
     if (realPlayers.length === 0) {
       this.stopAllTimers();
       this.removeBots();
+      this.hostId = null;
       this.state = this.emptyState();
     }
   }
@@ -148,6 +166,8 @@ export default class BlackjackServer implements Party.Server {
       case "hit": this.handleHit(sender); break;
       case "stand": this.handleStand(sender); break;
       case "double": this.handleDouble(sender); break;
+      case "add_bot": this.handleAddBot(sender); break;
+      case "remove_bot": this.handleRemoveBot(sender, data); break;
       case "chat": this.handleChat(sender, data); break;
     }
   }
@@ -161,6 +181,12 @@ export default class BlackjackServer implements Party.Server {
       avatar: (data.avatar as string) || "🎮",
     };
     this.players.set(conn.id, player);
+
+    // First real player becomes host
+    if (!this.hostId) {
+      this.hostId = conn.id;
+    }
+
     this.broadcast({ type: "player_joined", player });
     this.broadcastPlayers();
     conn.send(JSON.stringify({ type: "state", state: this.sanitizeState(conn.id) }));
@@ -262,6 +288,69 @@ export default class BlackjackServer implements Party.Server {
     const text = String(data.text || "").slice(0, 100);
     if (!text) return;
     this.broadcast({ type: "chat", playerId: conn.id, playerName: player.name, avatar: player.avatar, text });
+  }
+
+  private handleAddBot(conn: Party.Connection) {
+    if (conn.id !== this.hostId) return;
+    // Find an available bot profile not already seated
+    const activeIds = new Set(this.seatMap.keys());
+    const available = BOT_PROFILES.find((b) => !activeIds.has(b.id));
+    if (!available) return;
+
+    // Find an empty seat
+    const emptySeat = this.state.seats.find((s) => !s.player);
+    if (!emptySeat) return;
+
+    this.players.set(available.id, available);
+    this.seatMap.set(available.id, emptySeat.index);
+    this.state.seats[emptySeat.index] = { ...this.emptySeat(emptySeat.index), player: available, status: "waiting" };
+
+    this.broadcastPlayers();
+    this.broadcastState();
+
+    // If in betting phase, have the new bot bet
+    if (this.state.phase === "betting") {
+      const delay = 800 + Math.random() * 1500;
+      const seat = this.state.seats[emptySeat.index];
+      const t = setTimeout(() => {
+        if (this.state.phase !== "betting" || !seat.player) return;
+        const amounts = [50, 100, 150, 200, 250, 500];
+        seat.bet = amounts[Math.floor(Math.random() * amounts.length)];
+        seat.status = "betting";
+        this.broadcastState();
+        this.checkAllBetsIn();
+      }, delay);
+      this.timers.push(t);
+    }
+  }
+
+  private handleRemoveBot(conn: Party.Connection, data: Record<string, unknown>) {
+    if (conn.id !== this.hostId) return;
+    const botId = data.botId as string;
+    if (!botId) return;
+
+    const bot = this.players.get(botId);
+    if (!bot?.isBot) return;
+
+    const seatIdx = this.seatMap.get(botId);
+    if (seatIdx !== undefined) {
+      // If it's this bot's turn, advance first
+      if (this.state.activeSeatIndex === seatIdx && this.state.phase === "player_turns") {
+        this.state.seats[seatIdx] = this.emptySeat(seatIdx);
+        this.seatMap.delete(botId);
+        this.players.delete(botId);
+        this.advanceToNextTurn();
+      } else {
+        this.state.seats[seatIdx] = this.emptySeat(seatIdx);
+        this.seatMap.delete(botId);
+        this.players.delete(botId);
+      }
+    } else {
+      this.players.delete(botId);
+    }
+
+    this.broadcastPlayers();
+    this.broadcastState();
   }
 
   // === Bots ===
