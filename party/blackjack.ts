@@ -31,7 +31,7 @@ function handValue(hand: Card[]): number {
 type Phase = "waiting" | "betting" | "dealing" | "player_turns" | "dealer_turn" | "results";
 type SeatStatus = "empty" | "waiting" | "betting" | "playing" | "stood" | "busted" | "blackjack" | "done";
 
-interface Player { id: string; name: string; avatar: string; }
+interface Player { id: string; name: string; avatar: string; isBot?: boolean; }
 
 interface Seat {
   index: number;
@@ -56,12 +56,20 @@ interface GameState {
   bettingTimeLeft: number;
 }
 
+// === Bot Config ===
+const BOT_PROFILES: Player[] = [
+  { id: "bot_ace", name: "Ace", avatar: "🎩", isBot: true },
+  { id: "bot_lucky", name: "Lucky", avatar: "🍀", isBot: true },
+  { id: "bot_shark", name: "Shark", avatar: "🦈", isBot: true },
+];
+
 // === Constants ===
 const TOTAL_SEATS = 5;
-const BETTING_DURATION = 10;
+const BETTING_DURATION = 8;
 const HUMAN_TURN_TIMER = 15;
+const BOT_TURN_DELAY = 1200;
 const DEALER_HIT_DELAY = 600;
-const RESULTS_DURATION = 5;
+const RESULTS_DURATION = 4;
 
 export default class BlackjackServer implements Party.Server {
   players = new Map<string, Player>();
@@ -70,6 +78,7 @@ export default class BlackjackServer implements Party.Server {
   deck: Card[] = [];
   timers: ReturnType<typeof setTimeout>[] = [];
   countdownInterval: ReturnType<typeof setInterval> | null = null;
+  botsSpawned = false;
 
   constructor(readonly room: Party.Room) {
     this.state = this.emptyState();
@@ -119,8 +128,11 @@ export default class BlackjackServer implements Party.Server {
       this.broadcastState();
     }
 
-    if (this.players.size === 0) {
+    // Check if any real (non-bot) players remain
+    const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot);
+    if (realPlayers.length === 0) {
       this.stopAllTimers();
+      this.removeBots();
       this.state = this.emptyState();
     }
   }
@@ -152,6 +164,11 @@ export default class BlackjackServer implements Party.Server {
     this.broadcast({ type: "player_joined", player });
     this.broadcastPlayers();
     conn.send(JSON.stringify({ type: "state", state: this.sanitizeState(conn.id) }));
+
+    // Spawn bots when first real player joins
+    if (!this.botsSpawned) {
+      this.spawnBots();
+    }
   }
 
   private handleTakeSeat(conn: Party.Connection, data: Record<string, unknown>) {
@@ -163,13 +180,14 @@ export default class BlackjackServer implements Party.Server {
     if (seatIdx < 0 || seatIdx >= TOTAL_SEATS) return;
     if (this.state.seats[seatIdx].player !== null) return;
 
+    // Allow sitting down during ANY phase — player just waits for next round
     this.state.seats[seatIdx] = { ...this.emptySeat(seatIdx), player, status: "waiting" };
     this.seatMap.set(conn.id, seatIdx);
 
     this.broadcast({ type: "seat_taken", seatIndex: seatIdx, player });
     this.broadcastState();
 
-    // Start game if we have seated players and in waiting phase
+    // Start game if in waiting phase
     if (this.state.phase === "waiting") {
       this.startBetting();
     }
@@ -185,6 +203,9 @@ export default class BlackjackServer implements Party.Server {
     seat.bet = Math.max(10, Math.floor(Number(data.amount) || 100));
     seat.status = "betting";
     this.broadcastState();
+
+    // Check if all seated players have bet — skip timer
+    this.checkAllBetsIn();
   }
 
   private handleHit(conn: Party.Connection) {
@@ -243,6 +264,121 @@ export default class BlackjackServer implements Party.Server {
     this.broadcast({ type: "chat", playerId: conn.id, playerName: player.name, avatar: player.avatar, text });
   }
 
+  // === Bots ===
+
+  private spawnBots() {
+    this.botsSpawned = true;
+    // Seat 2 bots in random seats
+    const available = [0, 1, 2, 3, 4];
+    const shuffled = available.sort(() => Math.random() - 0.5);
+    const botCount = 2;
+
+    for (let i = 0; i < botCount && i < BOT_PROFILES.length; i++) {
+      const bot = BOT_PROFILES[i];
+      const seatIdx = shuffled[i];
+      this.players.set(bot.id, bot);
+      this.seatMap.set(bot.id, seatIdx);
+      this.state.seats[seatIdx] = { ...this.emptySeat(seatIdx), player: bot, status: "waiting" };
+    }
+
+    this.broadcastPlayers();
+    this.broadcastState();
+  }
+
+  private removeBots() {
+    for (const bot of BOT_PROFILES) {
+      const seatIdx = this.seatMap.get(bot.id);
+      if (seatIdx !== undefined) {
+        this.state.seats[seatIdx] = this.emptySeat(seatIdx);
+        this.seatMap.delete(bot.id);
+      }
+      this.players.delete(bot.id);
+    }
+    this.botsSpawned = false;
+  }
+
+  private botsBet() {
+    for (const bot of BOT_PROFILES) {
+      const seatIdx = this.seatMap.get(bot.id);
+      if (seatIdx === undefined) continue;
+      const seat = this.state.seats[seatIdx];
+      if (!seat.player || seat.status !== "waiting") continue;
+
+      // Stagger bot bets
+      const delay = 800 + Math.random() * 2000;
+      const t = setTimeout(() => {
+        if (this.state.phase !== "betting") return;
+        const amounts = [50, 100, 150, 200, 250, 500];
+        seat.bet = amounts[Math.floor(Math.random() * amounts.length)];
+        seat.status = "betting";
+        this.broadcastState();
+        this.checkAllBetsIn();
+      }, delay);
+      this.timers.push(t);
+    }
+  }
+
+  private botPlay(seatIdx: number) {
+    const seat = this.state.seats[seatIdx];
+    if (!seat.player?.isBot || seat.status !== "playing") return;
+
+    // Simple bot strategy: hit on 16 or less, stand on 17+
+    const decide = () => {
+      if (this.state.phase !== "player_turns" || this.state.activeSeatIndex !== seatIdx) return;
+      if (seat.status !== "playing") return;
+
+      if (seat.handValue <= 11) {
+        // Always hit on 11 or less
+        this.dealToSeat(seatIdx);
+        if (seat.handValue > 21) {
+          seat.status = "busted";
+          this.broadcastState();
+          this.advanceToNextTurn();
+        } else {
+          this.broadcastState();
+          const t = setTimeout(decide, BOT_TURN_DELAY);
+          this.timers.push(t);
+        }
+      } else if (seat.handValue <= 16) {
+        // Hit on soft 16 or less
+        this.dealToSeat(seatIdx);
+        if (seat.handValue > 21) {
+          seat.status = "busted";
+          this.broadcastState();
+          this.advanceToNextTurn();
+        } else if (seat.handValue >= 17) {
+          seat.status = "stood";
+          this.broadcastState();
+          this.advanceToNextTurn();
+        } else {
+          this.broadcastState();
+          const t = setTimeout(decide, BOT_TURN_DELAY);
+          this.timers.push(t);
+        }
+      } else {
+        // Stand on 17+
+        seat.status = "stood";
+        this.broadcastState();
+        this.advanceToNextTurn();
+      }
+    };
+
+    const t = setTimeout(decide, BOT_TURN_DELAY);
+    this.timers.push(t);
+  }
+
+  private checkAllBetsIn() {
+    if (this.state.phase !== "betting") return;
+    const seatedPlayers = this.state.seats.filter((s) => s.player);
+    if (seatedPlayers.length === 0) return;
+    const allBet = seatedPlayers.every((s) => s.status === "betting");
+    if (allBet) {
+      // Everyone bet — skip remaining timer
+      this.clearCountdown();
+      this.startDealing();
+    }
+  }
+
   // === Game Loop ===
 
   private startBetting() {
@@ -267,6 +403,9 @@ export default class BlackjackServer implements Party.Server {
     }
 
     this.broadcastState();
+
+    // Bots place bets
+    this.botsBet();
 
     let remaining = BETTING_DURATION;
     this.countdownInterval = setInterval(() => {
@@ -334,7 +473,13 @@ export default class BlackjackServer implements Party.Server {
     this.state.turnTimeLeft = HUMAN_TURN_TIMER;
     this.broadcastState();
 
-    // Turn countdown
+    // If bot, play automatically
+    if (seat.player.isBot) {
+      this.botPlay(seatIdx);
+      return;
+    }
+
+    // Turn countdown for human players
     this.countdownInterval = setInterval(() => {
       this.state.turnTimeLeft--;
       this.broadcast({ type: "turn_tick", remaining: this.state.turnTimeLeft });
@@ -425,7 +570,7 @@ export default class BlackjackServer implements Party.Server {
     this.broadcastState();
 
     const t = setTimeout(() => {
-      // Check if any seated players remain
+      // Check if any seated players remain (non-bot)
       const seatedPlayers = this.state.seats.some((s) => s.player && this.players.has(s.player.id));
       if (seatedPlayers) this.startBetting();
       else this.state.phase = "waiting";

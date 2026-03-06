@@ -334,7 +334,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                   isEmpty ? 'border-dashed border-white/[0.06] hover:border-white/[0.12] cursor-pointer' :
                   'border-white/[0.06]'
                 }`}
-                onClick={() => { if (isEmpty && !seated && (phase === 'betting' || phase === 'waiting')) sitDown(idx); }}
+                onClick={() => { if (isEmpty && !seated) sitDown(idx); }}
               >
                 {isEmpty ? (
                   <div className="flex-1 flex flex-col items-center justify-center gap-1">
@@ -414,16 +414,16 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
       {/* Controls */}
       <div className="space-y-3">
-        {!seated && (phase === 'betting' || phase === 'waiting') && (
+        {!seated && (
           <div className="text-center border border-dashed border-white/[0.08] py-6">
             <p className="text-zinc-500 text-sm mb-1">Click an empty seat to sit down</p>
-            <p className="text-zinc-700 text-xs">Pick your spot at the table</p>
+            <p className="text-zinc-700 text-xs">{phase !== 'waiting' && phase !== 'betting' ? 'You\'ll play next round' : 'Pick your spot at the table'}</p>
           </div>
         )}
 
         {seated && phase === 'betting' && !hasBet && (
           <div className="space-y-3">
-            <CountdownTimer totalSeconds={10} remainingSeconds={bettingTimeLeft} label="Betting closes in" />
+            <CountdownTimer totalSeconds={8} remainingSeconds={bettingTimeLeft} label="Betting closes in" />
             <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
             <button onClick={placeBet} disabled={balance < bet}
               className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
@@ -459,6 +459,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         {phase === 'dealer_turn' && <div className="text-center text-zinc-500 text-sm py-3 animate-pulse">dealer&apos;s turn...</div>}
         {phase === 'results' && <div className="text-center text-zinc-500 text-xs py-3 animate-pulse tracking-wider uppercase">next round starting soon...</div>}
         {phase === 'waiting' && seated && <div className="text-center text-zinc-500 text-xs py-3 animate-pulse tracking-wider uppercase">waiting for round to start...</div>}
+        {seated && !hasBet && (phase === 'dealing' || phase === 'player_turns' || phase === 'dealer_turn') && mySeat && mySeat.bet === 0 && (
+          <div className="text-center text-zinc-500 text-xs py-3 tracking-wider uppercase">playing next round...</div>
+        )}
       </div>
 
       <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
