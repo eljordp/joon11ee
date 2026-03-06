@@ -97,6 +97,8 @@ export default function CasinoPage() {
         setCasinoBalance(session.casinoBalance);
         setBalance(session.casinoBalance);
       }
+    } else {
+      setAuthOpen(true);
     }
     try {
       const saved = localStorage.getItem('casino_leaderboard');
@@ -459,7 +461,7 @@ export default function CasinoPage() {
         </div>
       </div>
 
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuth={handleAuth} />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuth={handleAuth} required={!user} />
     </div>
   );
 }

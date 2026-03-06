@@ -8,10 +8,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onAuth: (user: UserData) => void;
+  required?: boolean;
 }
 
-export default function AuthModal({ open, onClose, onAuth }: Props) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+export default function AuthModal({ open, onClose, onAuth, required }: Props) {
+  const [mode, setMode] = useState<'login' | 'signup'>(required ? 'signup' : 'login');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -54,7 +55,7 @@ export default function AuthModal({ open, onClose, onAuth }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          onClick={onClose}
+          onClick={required ? undefined : onClose}
         >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
@@ -68,9 +69,11 @@ export default function AuthModal({ open, onClose, onAuth }: Props) {
             className="relative w-full max-w-md border border-white/[0.08] bg-black p-8"
           >
             {/* Close */}
-            <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors text-xl">
-              &times;
-            </button>
+            {!required && (
+              <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors text-xl">
+                &times;
+              </button>
+            )}
 
             {/* Header */}
             <div className="text-center mb-8">
@@ -88,13 +91,14 @@ export default function AuthModal({ open, onClose, onAuth }: Props) {
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === 'signup' && (
                 <div>
-                  <label className="block text-zinc-400 text-xs tracking-wider uppercase mb-2">Name</label>
+                  <label className="block text-zinc-400 text-xs tracking-wider uppercase mb-2">Username</label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    maxLength={16}
                     className="w-full bg-black border border-white/[0.1] px-4 py-3 text-white focus:border-red-600 focus:outline-none transition-colors text-sm"
-                    placeholder="Your name"
+                    placeholder="Pick a username"
                     required
                   />
                 </div>

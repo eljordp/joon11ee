@@ -55,7 +55,7 @@ export function signup(email: string, name: string, password: string): UserData 
   // Store password hash (simple for localStorage — not production security)
   localStorage.setItem(`joon11ee_pw_${key}`, btoa(password));
   saveUsers(users);
-  sessionStorage.setItem(SESSION_KEY, key);
+  localStorage.setItem(SESSION_KEY, key);
   return userData;
 }
 
@@ -67,7 +67,7 @@ export function login(email: string, password: string): UserData | string {
   const storedPw = localStorage.getItem(`joon11ee_pw_${key}`);
   if (!storedPw || atob(storedPw) !== password) return 'Incorrect password.';
 
-  sessionStorage.setItem(SESSION_KEY, key);
+  localStorage.setItem(SESSION_KEY, key);
   return users[key];
 }
 
@@ -104,7 +104,7 @@ function migrateBadDates(data: UserData): UserData {
 
 export function getSession(): UserData | null {
   if (typeof window === 'undefined') return null;
-  const key = sessionStorage.getItem(SESSION_KEY);
+  const key = localStorage.getItem(SESSION_KEY);
   if (!key) return null;
   const users = getUsers();
   if (!users[key]) return null;
@@ -120,7 +120,7 @@ export function getSession(): UserData | null {
 }
 
 export function logout() {
-  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SESSION_KEY);
 }
 
 export function updateUserData(email: string, updater: (data: UserData) => UserData) {
