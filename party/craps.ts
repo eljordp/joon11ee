@@ -4,6 +4,7 @@ interface Player {
   id: string;
   name: string;
   avatar: string;
+  isBot?: boolean;
 }
 
 interface CrapsBet {
@@ -31,11 +32,20 @@ interface CrapsState {
   results: { playerId: string; playerName: string; profit: number }[];
 }
 
-const BETTING_DURATION = 10;
+const BETTING_DURATION = 6;
 const RESULTS_DURATION = 3;
+const AUTO_ROLL_DELAY = 2000;
 const PLACE_ODDS: Record<number, [number, number]> = {
   4: [9, 5], 5: [7, 5], 6: [7, 6], 8: [7, 6], 9: [7, 5], 10: [9, 5],
 };
+
+const BOT_NAMES = [
+  { name: 'Lucky Lou', avatar: '🎰' },
+  { name: 'Snake Eyes', avatar: '🐍' },
+  { name: 'Big Mike', avatar: '💪' },
+];
+
+const BOT_BET_AMOUNTS = [50, 100, 100, 200, 200, 500];
 
 export default class CrapsServer implements Party.Server {
   players = new Map<string, Player>();
@@ -43,6 +53,8 @@ export default class CrapsServer implements Party.Server {
   state: CrapsState;
   bettingTimer: ReturnType<typeof setInterval> | null = null;
   timers: ReturnType<typeof setTimeout>[] = [];
+  autoRollTimer: ReturnType<typeof setTimeout> | null = null;
+  botsSpawned = false;
 
   constructor(readonly room: Party.Room) {
     this.state = {
@@ -59,6 +71,9 @@ export default class CrapsServer implements Party.Server {
 
   onClose(conn: Party.Connection) {
     const player = this.players.get(conn.id);
+    // Don't remove bots when a real player disconnects
+    if (player?.isBot) return;
+
     this.players.delete(conn.id);
     this.playerBets.delete(conn.id);
     this.state.shooterOrder = this.state.shooterOrder.filter(id => id !== conn.id);
@@ -69,9 +84,14 @@ export default class CrapsServer implements Party.Server {
       this.broadcast({ type: 'player_left', playerId: conn.id, playerName: player.name });
       this.broadcastPlayers();
     }
-    if (this.players.size === 0) {
+
+    // Check if any real players left
+    const realPlayers = [...this.players.values()].filter(p => !p.isBot);
+    if (realPlayers.length === 0) {
       this.stopAllTimers();
       this.state.phase = 'waiting';
+      // Remove bots too
+      this.removeBots();
     }
   }
 
@@ -81,6 +101,7 @@ export default class CrapsServer implements Party.Server {
       case 'join': this.handleJoin(sender, data); break;
       case 'bet': this.handleBet(sender, data); break;
       case 'roll': this.handleRoll(sender); break;
+      case 'skip': this.handleSkip(sender); break;
       case 'chat': this.handleChat(sender, data); break;
     }
   }
@@ -90,6 +111,12 @@ export default class CrapsServer implements Party.Server {
     this.players.set(conn.id, player);
     if (!this.state.shooterOrder.includes(conn.id)) this.state.shooterOrder.push(conn.id);
     this.broadcast({ type: 'player_joined', player });
+
+    // Spawn bots when first real player joins
+    if (!this.botsSpawned) {
+      this.spawnBots();
+    }
+
     this.broadcastPlayers();
     if (this.state.phase === 'waiting' && this.players.size >= 1) this.startBetting();
   }
@@ -103,12 +130,9 @@ export default class CrapsServer implements Party.Server {
     const validTypes = ['pass', 'dont_pass', 'field', 'place'];
     if (!validTypes.includes(betType)) return;
 
-    // Place bets only during point phase
     if (betType === 'place' && this.state.phase !== 'point_betting' && this.state.point === null) return;
     const placeNumber = data.placeNumber as number | undefined;
     if (betType === 'place' && (!placeNumber || ![4, 5, 6, 8, 9, 10].includes(placeNumber))) return;
-
-    // Come-out only: pass/dont_pass. Point phase: field/place
     if (this.state.phase === 'betting' && betType === 'place') return;
 
     const bets = this.playerBets.get(conn.id) || [];
@@ -123,7 +147,26 @@ export default class CrapsServer implements Party.Server {
   private handleRoll(conn: Party.Connection) {
     if (this.state.phase !== 'rolling' && this.state.phase !== 'point_rolling') return;
     if (conn.id !== this.state.shooterId) return;
+    this.clearAutoRoll();
     this.rollDice();
+  }
+
+  private handleSkip(conn: Party.Connection) {
+    // Only allow skip during betting phases
+    if (this.state.phase !== 'betting' && this.state.phase !== 'point_betting') return;
+    // Only the player can skip (not bots)
+    const player = this.players.get(conn.id);
+    if (!player || player.isBot) return;
+    // Skip the timer
+    this.clearBettingTimer();
+    if (this.state.phase === 'betting') {
+      this.state.phase = 'rolling';
+    } else {
+      this.state.phase = 'point_rolling';
+    }
+    this.state.bettingTimeLeft = 0;
+    this.broadcastState();
+    this.scheduleAutoRoll();
   }
 
   private handleChat(conn: Party.Connection, data: Record<string, unknown>) {
@@ -133,6 +176,81 @@ export default class CrapsServer implements Party.Server {
     if (!text) return;
     this.broadcast({ type: 'chat', playerId: conn.id, playerName: player.name, avatar: player.avatar, text });
   }
+
+  // === BOTS ===
+
+  private spawnBots() {
+    this.botsSpawned = true;
+    const numBots = 2 + Math.floor(Math.random() * 2); // 2-3 bots
+    for (let i = 0; i < numBots && i < BOT_NAMES.length; i++) {
+      const botId = `bot_${i}_${Date.now()}`;
+      const bot: Player = {
+        id: botId,
+        name: BOT_NAMES[i].name,
+        avatar: BOT_NAMES[i].avatar,
+        isBot: true,
+      };
+      this.players.set(botId, bot);
+      // Don't add bots to shooter order - only real players shoot
+      this.broadcast({ type: 'player_joined', player: bot });
+    }
+  }
+
+  private removeBots() {
+    for (const [id, player] of this.players) {
+      if (player.isBot) {
+        this.players.delete(id);
+        this.playerBets.delete(id);
+      }
+    }
+    this.botsSpawned = false;
+  }
+
+  private botsBet() {
+    const bots = [...this.players.values()].filter(p => p.isBot);
+    for (const bot of bots) {
+      // Random delay for each bot (staggered, feels natural)
+      const delay = 500 + Math.random() * 2000;
+      const t = setTimeout(() => {
+        if (this.state.phase !== 'betting' && this.state.phase !== 'point_betting') return;
+        const amount = BOT_BET_AMOUNTS[Math.floor(Math.random() * BOT_BET_AMOUNTS.length)];
+
+        if (this.state.phase === 'betting') {
+          // Come-out: pass, dont_pass, or field
+          const roll = Math.random();
+          let betType: string;
+          if (roll < 0.55) betType = 'pass';
+          else if (roll < 0.75) betType = 'dont_pass';
+          else betType = 'field';
+
+          const bets = this.playerBets.get(bot.id) || [];
+          bets.push({ type: betType as CrapsBet['type'], amount });
+          this.playerBets.set(bot.id, bets);
+          this.broadcast({ type: 'bet_placed', playerId: bot.id, playerName: bot.name, betType, amount });
+        } else if (this.state.phase === 'point_betting') {
+          // Point phase: field or place bets
+          const roll = Math.random();
+          if (roll < 0.4) {
+            const bets = this.playerBets.get(bot.id) || [];
+            bets.push({ type: 'field', amount });
+            this.playerBets.set(bot.id, bets);
+            this.broadcast({ type: 'bet_placed', playerId: bot.id, playerName: bot.name, betType: 'field', amount });
+          } else {
+            const placeNums = [4, 5, 6, 8, 9, 10].filter(n => n !== this.state.point);
+            const placeNumber = placeNums[Math.floor(Math.random() * placeNums.length)];
+            const bets = this.playerBets.get(bot.id) || [];
+            bets.push({ type: 'place', amount, placeNumber });
+            this.playerBets.set(bot.id, bets);
+            this.broadcast({ type: 'bet_placed', playerId: bot.id, playerName: bot.name, betType: 'place', amount, placeNumber });
+          }
+        }
+        this.broadcastState();
+      }, delay);
+      this.timers.push(t);
+    }
+  }
+
+  // === GAME FLOW ===
 
   private startBetting() {
     this.state.phase = 'betting';
@@ -146,6 +264,10 @@ export default class CrapsServer implements Party.Server {
     let remaining = BETTING_DURATION;
     this.state.bettingTimeLeft = remaining;
     this.broadcastState();
+
+    // Bots place bets
+    this.botsBet();
+
     this.bettingTimer = setInterval(() => {
       remaining--;
       this.state.bettingTimeLeft = Math.max(0, remaining);
@@ -154,6 +276,7 @@ export default class CrapsServer implements Party.Server {
         this.clearBettingTimer();
         this.state.phase = 'rolling';
         this.broadcastState();
+        this.scheduleAutoRoll();
       }
     }, 1000);
   }
@@ -163,6 +286,10 @@ export default class CrapsServer implements Party.Server {
     let remaining = BETTING_DURATION;
     this.state.bettingTimeLeft = remaining;
     this.broadcastState();
+
+    // Bots place point bets (some will, some won't)
+    if (Math.random() > 0.3) this.botsBet();
+
     this.bettingTimer = setInterval(() => {
       remaining--;
       this.state.bettingTimeLeft = Math.max(0, remaining);
@@ -171,8 +298,22 @@ export default class CrapsServer implements Party.Server {
         this.clearBettingTimer();
         this.state.phase = 'point_rolling';
         this.broadcastState();
+        this.scheduleAutoRoll();
       }
     }, 1000);
+  }
+
+  private scheduleAutoRoll() {
+    this.clearAutoRoll();
+    this.autoRollTimer = setTimeout(() => {
+      if (this.state.phase === 'rolling' || this.state.phase === 'point_rolling') {
+        this.rollDice();
+      }
+    }, AUTO_ROLL_DELAY);
+  }
+
+  private clearAutoRoll() {
+    if (this.autoRollTimer) { clearTimeout(this.autoRollTimer); this.autoRollTimer = null; }
   }
 
   private rollDice() {
@@ -194,16 +335,12 @@ export default class CrapsServer implements Party.Server {
 
   private resolveComeOut(total: number) {
     if (total === 7 || total === 11) {
-      // Pass wins, don't pass loses
       this.resolveRound('pass_wins');
     } else if (total === 2 || total === 3) {
-      // Craps: pass loses, don't pass wins
       this.resolveRound('pass_loses');
     } else if (total === 12) {
-      // Pass loses, don't pass pushes
       this.resolveRound('pass_loses_dp_push');
     } else {
-      // Point is set
       this.state.point = total;
       this.broadcast({ type: 'point_set', point: total });
       this.resolveFieldBets(total);
@@ -217,7 +354,6 @@ export default class CrapsServer implements Party.Server {
     } else if (total === 7) {
       this.resolveRound('seven_out');
     } else {
-      // Resolve field bets, place bets that hit
       this.resolveFieldBets(total);
       this.resolvePlaceBets(total);
       this.broadcastState();
@@ -240,7 +376,6 @@ export default class CrapsServer implements Party.Server {
           } else {
             this.addResult(pid, pname, -bet.amount);
           }
-          // Field bets are one-roll, don't carry forward
         } else {
           newBets.push(bet);
         }
@@ -258,7 +393,6 @@ export default class CrapsServer implements Party.Server {
           const odds = PLACE_ODDS[total];
           const profit = Math.floor(bet.amount * odds[0] / odds[1]);
           this.addResult(pid, player?.name || 'Anon', profit);
-          // Place bet stays active until seven-out
           newBets.push(bet);
         } else {
           newBets.push(bet);
@@ -284,21 +418,25 @@ export default class CrapsServer implements Party.Server {
           // Already resolved per-roll
         } else if (bet.type === 'place') {
           if (outcome === 'seven_out') this.addResult(pid, pname, -bet.amount);
-          // point_hit: place bets just stay, no loss
         }
       }
     }
 
-    // Resolve field on final roll
     const total = this.state.diceTotal;
     this.resolveFieldBets(total);
 
     if (outcome === 'seven_out') {
-      // Rotate shooter
-      const idx = this.state.shooterOrder.indexOf(this.state.shooterId!);
-      const nextIdx = (idx + 1) % this.state.shooterOrder.length;
-      this.state.shooterId = this.state.shooterOrder[nextIdx];
-      const newShooter = this.players.get(this.state.shooterId);
+      // Rotate shooter (only among real players)
+      const realShooters = this.state.shooterOrder.filter(id => {
+        const p = this.players.get(id);
+        return p && !p.isBot;
+      });
+      if (realShooters.length > 0) {
+        const idx = realShooters.indexOf(this.state.shooterId!);
+        const nextIdx = (idx + 1) % realShooters.length;
+        this.state.shooterId = realShooters[nextIdx];
+      }
+      const newShooter = this.players.get(this.state.shooterId!);
       this.broadcast({ type: 'shooter_change', newShooterId: this.state.shooterId, newShooterName: newShooter?.name || 'Anon' });
     }
 
@@ -307,8 +445,12 @@ export default class CrapsServer implements Party.Server {
     this.broadcastState();
 
     const t = setTimeout(() => {
-      if (this.players.size > 0) this.startBetting();
-      else this.state.phase = 'waiting';
+      const realPlayers = [...this.players.values()].filter(p => !p.isBot);
+      if (realPlayers.length > 0) this.startBetting();
+      else {
+        this.state.phase = 'waiting';
+        this.removeBots();
+      }
     }, RESULTS_DURATION * 1000);
     this.timers.push(t);
   }
@@ -347,6 +489,7 @@ export default class CrapsServer implements Party.Server {
 
   private stopAllTimers() {
     this.clearBettingTimer();
+    this.clearAutoRoll();
     this.timers.forEach(t => clearTimeout(t));
     this.timers = [];
   }

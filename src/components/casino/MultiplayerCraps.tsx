@@ -185,6 +185,11 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
     wsRef.current.send(JSON.stringify({ type: 'roll' }));
   }, []);
 
+  const skipTimer = useCallback(() => {
+    if (!wsRef.current) return;
+    wsRef.current.send(JSON.stringify({ type: 'skip' }));
+  }, []);
+
   const sendChat = useCallback((text: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
   }, []);
@@ -436,7 +441,16 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           {/* Bet controls */}
           {isBetting && (
             <div className="space-y-3">
-              <CountdownTimer totalSeconds={10} remainingSeconds={bettingTimeLeft} label={phase === 'betting' ? 'Come-out bets' : 'Point bets'} />
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <CountdownTimer totalSeconds={6} remainingSeconds={bettingTimeLeft} label={phase === 'betting' ? 'Come-out bets' : 'Point bets'} />
+                </div>
+                <button onClick={skipTimer}
+                  className="px-4 py-2 bg-white/[0.06] text-zinc-400 text-[10px] font-bold tracking-widest uppercase hover:bg-white/[0.1] hover:text-white transition-all border border-white/[0.08]"
+                >
+                  ROLL NOW
+                </button>
+              </div>
               <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
 
               {/* Come-out bet buttons */}
@@ -494,27 +508,28 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
             </div>
           )}
 
-          {/* Roll button for shooter */}
-          {isRolling && isShooter && (
+          {/* Roll button for shooter (auto-rolls in 2s if not clicked) */}
+          {isRolling && isShooter && !diceRolling && (
             <motion.button
               onClick={rollDice}
               initial={{ scale: 0.95 }}
               animate={{ scale: [0.95, 1.02, 0.95] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
               className="w-full bg-red-600 text-white py-5 text-base font-black tracking-widest uppercase hover:bg-red-500 transition-colors shadow-[0_0_40px_rgba(220,38,38,0.25)] border border-red-500/30"
             >
               🎲 ROLL THE DICE
+              <span className="block text-[10px] font-normal opacity-60 mt-0.5">auto-rolls in 2s</span>
             </motion.button>
           )}
 
-          {isRolling && !isShooter && (
-            <div className="text-center py-4">
+          {isRolling && !isShooter && !diceRolling && (
+            <div className="text-center py-3">
               <motion.div
                 animate={{ opacity: [0.4, 0.8, 0.4] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
                 className="text-zinc-500 text-xs tracking-[0.2em] uppercase"
               >
-                waiting for shooter to roll...
+                rolling...
               </motion.div>
             </div>
           )}
