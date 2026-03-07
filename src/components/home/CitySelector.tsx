@@ -26,7 +26,7 @@ export default function CitySelector() {
             </span>
           </div>
           <h2 className="text-section-title text-white mb-8 md:mb-16">
-            Miami.<br />
+            Three Cities.<br />
             <span className="text-zinc-500">Endless Possibilities.</span>
           </h2>
         </RevealOnScroll>
