@@ -417,7 +417,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft, hostId, botIds, deckSize, deckTotal } = serverState;
   const isMyTurn = mySeatIndex !== null && activeSeatIndex === mySeatIndex && phase === 'player_turns';
   const mySeat = mySeatIndex !== null ? seats[mySeatIndex] : null;
-  const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= mySeat.bet;
+  const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= mySeat.bet * 2;
   const isHost = myId !== null && hostId === myId;
   const botIdSet = new Set(botIds || []);
   const deckPct = deckTotal > 0 ? Math.max(0, Math.min(100, (deckSize / deckTotal) * 100)) : 0;
@@ -753,8 +753,14 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
       {/* Reactions */}
       {connected && (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-2">
           <EmotePicker onSelect={sendReaction} />
+          {/* Quick reactions */}
+          {['🔥', '💀', '🎉', '💰'].map(e => (
+            <button key={e} onClick={() => sendReaction(e)} className="w-9 h-9 flex items-center justify-center text-lg border border-white/[0.06] hover:border-white/20 hover:bg-white/5 hover:scale-110 transition-all">
+              {e}
+            </button>
+          ))}
         </div>
       )}
 

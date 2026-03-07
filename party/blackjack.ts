@@ -357,7 +357,7 @@ export default class BlackjackServer implements Party.Server {
     this.dealToSeat(seatIdx);
     seat.status = seat.handValue > 21 ? "busted" : "stood";
     if (seat.player && !seat.player.isBot) {
-      this.broadcastSystemChat(`${seat.player.name} doubled down for $${seat.bet}! 💰`);
+      this.broadcastSystemChat(`${seat.player.name} doubled down to $${seat.bet}! 💰`);
     }
     this.broadcastState();
     this.advanceToNextTurn();

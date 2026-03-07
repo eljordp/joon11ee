@@ -378,13 +378,12 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
     const pVal = handValue(pHand);
     if (pVal > 21) return { profit: -handBet, text: `-$${handBet.toLocaleString()}`, sub: 'BUST', win: false };
     if (dealerBust) {
-      const w = handBet * 2;
-      return { profit: handBet, text: `+$${w.toLocaleString()}`, sub: 'dealer busted', win: true };
+      return { profit: handBet, text: `+$${handBet.toLocaleString()}`, sub: 'dealer busted', win: true };
     }
     if (pVal > dVal) {
       const isBJ = pVal === 21 && pHand.length === 2;
-      const w = isBJ ? Math.floor(handBet * 2.5) : handBet * 2;
-      return { profit: w - handBet, text: `+$${w.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${pVal} vs ${dVal}`, win: true };
+      const profit = isBJ ? Math.floor(handBet * 1.5) : handBet;
+      return { profit, text: `+$${profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${pVal} vs ${dVal}`, win: true };
     }
     if (pVal < dVal) return { profit: -handBet, text: `-$${handBet.toLocaleString()}`, sub: `${pVal} vs ${dVal}`, win: false };
     return { profit: 0, text: 'PUSH', sub: `both ${pVal}`, win: null };
@@ -414,7 +413,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         if (insuranceBet !== null && insuranceBet > 0) {
           const dealerHasBJ = handValue(newDealerHand) === 21 && newDealerHand.length === 2;
           if (dealerHasBJ) {
-            onWin(insuranceBet * 3, insuranceBet); // 2:1 payout + original back
+            onWin(insuranceBet * 2, insuranceBet); // 2:1 payout (bet never deducted)
           } else {
             onLose(insuranceBet);
           }
@@ -436,7 +435,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
 
           if (totalProfit > 0) {
             sounds.win();
-            onWin(totalProfit + hand1Bet + hand2Bet, hand1Bet + hand2Bet);
+            onWin(totalProfit, hand1Bet + hand2Bet);
             updateStats('win', totalProfit);
             setResult({ text: `+$${totalProfit.toLocaleString()}`, sub: 'split total', win: true });
           } else if (totalProfit < 0) {
@@ -453,7 +452,7 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
           const r = evaluateHand(pHand, dVal, dealerBust, actualBet);
           if (r.win === true) {
             if (handValue(pHand) === 21 && pHand.length === 2) sounds.jackpot(); else sounds.win();
-            onWin(r.profit + actualBet, actualBet);
+            onWin(r.profit, actualBet);
             updateStats('win', r.profit);
           } else if (r.win === false) {
             sounds.lose();
