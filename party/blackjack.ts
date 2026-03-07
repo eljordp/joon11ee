@@ -60,6 +60,8 @@ interface GameState {
   bettingTimeLeft: number;
   hostId: string | null;
   botIds: string[];
+  deckSize: number;
+  deckTotal: number;
 }
 
 // === Bot Config ===
@@ -111,6 +113,8 @@ export default class BlackjackServer implements Party.Server {
       bettingTimeLeft: BETTING_DURATION,
       hostId: this.hostId,
       botIds: this.getActiveBotIds(),
+      deckSize: 0,
+      deckTotal: DECK_COUNT * 52,
     };
   }
 
@@ -622,6 +626,8 @@ export default class BlackjackServer implements Party.Server {
     this.deck = [];
     for (let d = 0; d < DECK_COUNT; d++) this.deck.push(...createDeck());
     shuffleDeck(this.deck);
+    this.state.deckTotal = this.deck.length;
+    this.state.deckSize = this.deck.length;
 
     // Deal 2 cards to each bettor, track last bets
     for (const seat of this.state.seats) {
@@ -639,6 +645,7 @@ export default class BlackjackServer implements Party.Server {
     // Dealer gets 2 cards
     this.state.dealerHand = [this.deck.pop()!, this.deck.pop()!];
     this.state.dealerHandValue = handValue(this.state.dealerHand);
+    this.state.deckSize = this.deck.length;
 
     this.broadcastState();
 
@@ -804,6 +811,7 @@ export default class BlackjackServer implements Party.Server {
     if (this.deck.length === 0) return;
     seat.hand.push(this.deck.pop()!);
     seat.handValue = handValue(seat.hand);
+    this.state.deckSize = this.deck.length;
   }
 
   private broadcast(data: Record<string, unknown>) {

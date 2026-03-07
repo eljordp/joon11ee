@@ -50,6 +50,8 @@ interface ServerState {
   bettingTimeLeft: number;
   hostId: string | null;
   botIds: string[];
+  deckSize: number;
+  deckTotal: number;
 }
 
 function PlayingCard({ card, hidden = false, index, small = false }: { card: Card; hidden?: boolean; index: number; small?: boolean }) {
@@ -412,12 +414,13 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     );
   }
 
-  const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft, hostId, botIds } = serverState;
+  const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft, hostId, botIds, deckSize, deckTotal } = serverState;
   const isMyTurn = mySeatIndex !== null && activeSeatIndex === mySeatIndex && phase === 'player_turns';
   const mySeat = mySeatIndex !== null ? seats[mySeatIndex] : null;
   const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= mySeat.bet;
   const isHost = myId !== null && hostId === myId;
   const botIdSet = new Set(botIds || []);
+  const deckPct = deckTotal > 0 ? Math.max(0, Math.min(100, (deckSize / deckTotal) * 100)) : 0;
 
   return (
     <div className="space-y-3 relative">
@@ -472,6 +475,67 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       )}
 
       <div className="border border-white/[0.06] bg-zinc-950/50 p-4 sm:p-6">
+        {/* Shoe / Deck indicator */}
+        {deckTotal > 0 && (
+          <div className="flex items-center gap-3 mb-4 px-2">
+            {/* Visual card stack */}
+            <div className="relative w-10 h-14 flex-shrink-0">
+              {/* Stack layers — number of visible layers based on remaining % */}
+              {[...Array(Math.max(1, Math.ceil((deckPct / 100) * 5)))].map((_, i, arr) => (
+                <motion.div
+                  key={i}
+                  className="absolute rounded-sm border border-red-900/60 bg-gradient-to-br from-red-950 to-red-900"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    bottom: i * 2,
+                    left: i * 0.5,
+                    zIndex: arr.length - i,
+                  }}
+                  animate={phase === 'dealing' ? {
+                    rotateZ: [0, -2, 2, -1, 0],
+                    x: [0, -1, 1, -0.5, 0],
+                  } : {}}
+                  transition={phase === 'dealing' ? {
+                    duration: 0.4,
+                    repeat: 3,
+                    delay: i * 0.05,
+                  } : {}}
+                />
+              ))}
+              {/* Top card face-down design */}
+              <div className="absolute inset-0 rounded-sm border border-red-800/80 bg-gradient-to-br from-red-900 to-red-950 flex items-center justify-center z-10"
+                style={{ bottom: Math.max(1, Math.ceil((deckPct / 100) * 5)) * 2, left: Math.max(1, Math.ceil((deckPct / 100) * 5)) * 0.5 }}
+              >
+                <span className="text-red-700/80 text-[8px] font-black">J</span>
+              </div>
+            </div>
+
+            {/* Deck info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-zinc-600 text-[9px] tracking-wider uppercase">
+                  {phase === 'dealing' ? 'Shuffling...' : 'Shoe'}
+                </span>
+                <span className="text-zinc-500 text-[10px] font-mono">
+                  {deckSize}/{deckTotal}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-zinc-800/50 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${
+                    deckPct > 50 ? 'bg-green-500/60' : deckPct > 20 ? 'bg-yellow-500/60' : 'bg-red-500/60'
+                  }`}
+                  initial={false}
+                  animate={{ width: `${deckPct}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dealer */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
