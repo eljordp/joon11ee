@@ -110,6 +110,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const [profilePlayer, setProfilePlayer] = useState<{ name: string; seatIndex: number } | null>(null);
   const [tableHistory, setTableHistory] = useState<{ round: number; players: { name: string; bet: number; profit: number }[] }[]>([]);
   const [tableName, setTableName] = useState(username || '');
+  const [actionSent, setActionSent] = useState(false);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -153,12 +154,18 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       setConnected(true);
       setMyId(ws.id);
       setAuthError(undefined);
+      // Reset stale state on connect/reconnect
+      setHasBet(false);
+      setResult(null);
+      setActionSent(false);
       ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password, spectate: !!spectate }));
     });
 
     ws.addEventListener('message', (evt) => {
-      const data = JSON.parse(evt.data);
-      handleMessageRef.current(data, ws.id);
+      try {
+        const data = JSON.parse(evt.data);
+        handleMessageRef.current(data, ws.id);
+      } catch { /* ignore malformed messages */ }
     });
 
     ws.addEventListener('close', () => {
@@ -184,6 +191,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           setSeated(false);
           setMySeatIndex(null);
         }
+
+        // Reset action debounce on any state update (server acknowledged action)
+        setActionSent(false);
 
         if (state.phase !== prevPhaseRef.current) {
           if (state.phase === 'dealing') {
@@ -345,12 +355,13 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     sounds.bet();
   }, [hasBet, balance, bet]);
 
-  const hit = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'hit' })); sounds.cardDeal(); }, []);
-  const stand = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'stand' })); sounds.click(); }, []);
+  const hit = useCallback(() => { if (actionSent) return; setActionSent(true); wsRef.current?.send(JSON.stringify({ type: 'hit' })); sounds.cardDeal(); }, [actionSent]);
+  const stand = useCallback(() => { if (actionSent) return; setActionSent(true); wsRef.current?.send(JSON.stringify({ type: 'stand' })); sounds.click(); }, [actionSent]);
   const doubleDown = useCallback(() => {
+    if (actionSent) return; setActionSent(true);
     wsRef.current?.send(JSON.stringify({ type: 'double' }));
     sounds.bet();
-  }, []);
+  }, [actionSent]);
 
   const sendChat = useCallback((text: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
@@ -653,10 +664,10 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
         {isMyTurn && (
           <div className={`grid ${canDouble ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
-            <button onClick={hit} className="bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all">HIT</button>
-            <button onClick={stand} className="border border-white/20 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-white/5 transition-all">STAND</button>
+            <button onClick={hit} disabled={actionSent} className="bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed">HIT</button>
+            <button onClick={stand} disabled={actionSent} className="border border-white/20 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">STAND</button>
             {canDouble && (
-              <button onClick={doubleDown} className="bg-yellow-600/80 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-yellow-500/80 transition-all">2x</button>
+              <button onClick={doubleDown} disabled={actionSent} className="bg-yellow-600/80 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-yellow-500/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed">2x</button>
             )}
           </div>
         )}

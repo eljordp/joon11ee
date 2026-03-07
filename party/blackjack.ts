@@ -13,6 +13,10 @@ function createDeck(): Card[] {
       deck.push({ suit, rank: RANKS[i], value: i === 0 ? 11 : Math.min(i + 1, 10) });
     }
   }
+  return deck;
+}
+
+function shuffleDeck(deck: Card[]): Card[] {
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -72,6 +76,9 @@ const HUMAN_TURN_TIMER = 15;
 const BOT_TURN_DELAY = 1200;
 const DEALER_HIT_DELAY = 600;
 const RESULTS_DURATION = 4;
+const MIN_BET = 10;
+const MAX_BET = 50000;
+const DECK_COUNT = 6; // 6-deck shoe (standard casino)
 
 export default class BlackjackServer implements Party.Server {
   players = new Map<string, Player>();
@@ -137,19 +144,29 @@ export default class BlackjackServer implements Party.Server {
 
     const player = this.players.get(conn.id);
     if (player) {
-      // Clear their seat
+      // Clear their seat (forfeit bet if mid-hand)
       const seatIdx = this.seatMap.get(conn.id);
       if (seatIdx !== undefined) {
+        const seat = this.state.seats[seatIdx];
+        // If they had an active bet during a hand, it's forfeited (counts as loss)
+        if (seat.bet > 0 && (this.state.phase === "dealing" || this.state.phase === "player_turns" || this.state.phase === "dealer_turn" || this.state.phase === "results")) {
+          seat.profit = -seat.bet;
+          seat.status = "done";
+          this.broadcastSystemChat(`${player.name} disconnected and forfeited $${seat.bet}`);
+        }
+
+        const wasMyTurn = this.state.activeSeatIndex === seatIdx && this.state.phase === "player_turns";
         this.state.seats[seatIdx] = this.emptySeat(seatIdx);
         this.seatMap.delete(conn.id);
 
         // If it was their turn, advance
-        if (this.state.activeSeatIndex === seatIdx && this.state.phase === "player_turns") {
+        if (wasMyTurn) {
           this.advanceToNextTurn();
         }
       }
 
       this.players.delete(conn.id);
+      this.lastBets.delete(conn.id);
       this.broadcast({ type: "player_left", playerId: conn.id, playerName: player.name });
       this.broadcastPlayers();
       this.broadcastState();
@@ -226,6 +243,12 @@ export default class BlackjackServer implements Party.Server {
       return;
     }
 
+    // If player was a spectator and is re-joining as a player, remove from spectators
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+    }
+
     // First real player becomes host
     if (!this.hostId) {
       this.hostId = conn.id;
@@ -248,7 +271,7 @@ export default class BlackjackServer implements Party.Server {
     if (this.seatMap.has(conn.id)) return; // Already seated
 
     const seatIdx = Number(data.seatIndex);
-    if (seatIdx < 0 || seatIdx >= TOTAL_SEATS) return;
+    if (!Number.isInteger(seatIdx) || seatIdx < 0 || seatIdx >= TOTAL_SEATS) return;
     if (this.state.seats[seatIdx].player !== null) return;
 
     // Allow sitting down during ANY phase — player just waits for next round
@@ -266,12 +289,15 @@ export default class BlackjackServer implements Party.Server {
 
   private handleBet(conn: Party.Connection, data: Record<string, unknown>) {
     if (this.state.phase !== "betting") return;
+    if (this.spectators.has(conn.id)) return;
     const seatIdx = this.seatMap.get(conn.id);
     if (seatIdx === undefined) return;
     const seat = this.state.seats[seatIdx];
     if (!seat.player || seat.status === "betting") return;
 
-    seat.bet = Math.max(10, Math.floor(Number(data.amount) || 100));
+    const raw = Number(data.amount);
+    if (!isFinite(raw)) return;
+    seat.bet = Math.min(MAX_BET, Math.max(MIN_BET, Math.floor(raw)));
     seat.status = "betting";
     this.broadcastState();
 
@@ -281,6 +307,7 @@ export default class BlackjackServer implements Party.Server {
 
   private handleHit(conn: Party.Connection) {
     if (this.state.phase !== "player_turns") return;
+    if (this.spectators.has(conn.id)) return;
     const seatIdx = this.seatMap.get(conn.id);
     if (seatIdx === undefined || this.state.activeSeatIndex !== seatIdx) return;
     const seat = this.state.seats[seatIdx];
@@ -302,6 +329,7 @@ export default class BlackjackServer implements Party.Server {
 
   private handleStand(conn: Party.Connection) {
     if (this.state.phase !== "player_turns") return;
+    if (this.spectators.has(conn.id)) return;
     const seatIdx = this.seatMap.get(conn.id);
     if (seatIdx === undefined || this.state.activeSeatIndex !== seatIdx) return;
     const seat = this.state.seats[seatIdx];
@@ -314,6 +342,7 @@ export default class BlackjackServer implements Party.Server {
 
   private handleDouble(conn: Party.Connection) {
     if (this.state.phase !== "player_turns") return;
+    if (this.spectators.has(conn.id)) return;
     const seatIdx = this.seatMap.get(conn.id);
     if (seatIdx === undefined || this.state.activeSeatIndex !== seatIdx) return;
     const seat = this.state.seats[seatIdx];
@@ -345,8 +374,8 @@ export default class BlackjackServer implements Party.Server {
     const seat = this.state.seats[seatIdx];
     if (!seat.player || seat.status === "betting") return;
     const lastBet = this.lastBets.get(conn.id);
-    if (!lastBet) return;
-    seat.bet = lastBet;
+    if (!lastBet || !isFinite(lastBet)) return;
+    seat.bet = Math.min(MAX_BET, Math.max(MIN_BET, lastBet));
     seat.status = "betting";
     this.broadcastState();
     this.checkAllBetsIn();
@@ -589,7 +618,10 @@ export default class BlackjackServer implements Party.Server {
     }
 
     this.state.phase = "dealing";
-    this.deck = createDeck();
+    // Use 6-deck shoe to prevent card exhaustion
+    this.deck = [];
+    for (let d = 0; d < DECK_COUNT; d++) this.deck.push(...createDeck());
+    shuffleDeck(this.deck);
 
     // Deal 2 cards to each bettor, track last bets
     for (const seat of this.state.seats) {
@@ -780,10 +812,8 @@ export default class BlackjackServer implements Party.Server {
   }
 
   private broadcastState() {
-    // Send sanitized state to each connection
-    for (const conn of this.room.getConnections()) {
-      conn.send(JSON.stringify({ type: "state", state: this.sanitizeState(conn.id) }));
-    }
+    const msg = JSON.stringify({ type: "state", state: this.sanitizeState() });
+    for (const conn of this.room.getConnections()) conn.send(msg);
   }
 
   private broadcastPlayers() {
