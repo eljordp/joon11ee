@@ -8,7 +8,7 @@ import CarImage from '@/components/fleet/CarImage';
 import Link from 'next/link';
 
 export default function CitySelector() {
-  const [activeCity, setActiveCity] = useState<City>('sf');
+  const [activeCity, setActiveCity] = useState<City>('mia');
   const cityData = cities[activeCity];
   const cityCars = getCarsByCity(activeCity);
 
@@ -26,7 +26,7 @@ export default function CitySelector() {
             </span>
           </div>
           <h2 className="text-section-title text-white mb-8 md:mb-16">
-            Three Cities.<br />
+            Miami.<br />
             <span className="text-zinc-500">Endless Possibilities.</span>
           </h2>
         </RevealOnScroll>

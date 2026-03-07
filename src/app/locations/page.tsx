@@ -7,8 +7,6 @@ import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import ParticleBackground from '@/components/ui/ParticleBackground';
 
 const cityImages: Record<City, string> = {
-  sf: 'linear-gradient(135deg, #1a1a3e 0%, #0a0a2e 50%, #050520 100%)',
-  la: 'linear-gradient(135deg, #2a1a0a 0%, #1a100a 50%, #0a0805 100%)',
   mia: 'linear-gradient(135deg, #0a2a2a 0%, #051a1a 50%, #020f0f 100%)',
 };
 
@@ -34,7 +32,7 @@ export default function LocationsPage() {
               Where We Operate
             </h1>
             <p className="text-zinc-400 text-lg max-w-lg">
-              Three iconic cities. Premium pickup locations. Seamless experience.
+              Premium pickup location. Seamless experience.
             </p>
           </RevealOnScroll>
         </div>
