@@ -68,7 +68,9 @@ export default function GlobalLeaderboard({ username }: Props) {
     leaderboardWs = ws;
 
     ws.addEventListener('message', (e) => {
-      const data = JSON.parse(e.data);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try { data = JSON.parse(e.data); } catch { return; }
       if (data.type === 'leaderboard') {
         setDaily(data.daily || []);
         setWeekly(data.weekly || []);
@@ -97,20 +99,6 @@ export default function GlobalLeaderboard({ username }: Props) {
 
   return (
     <div className="mt-8">
-      {/* Jackpot display */}
-      <div className="border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 mb-4 text-center relative overflow-hidden">
-        <p className="text-yellow-500/60 text-[9px] tracking-[0.3em] uppercase font-bold">Progressive Jackpot</p>
-        <motion.p
-          key={jackpot}
-          initial={{ scale: 1.1 }}
-          animate={{ scale: 1 }}
-          className="text-yellow-400 text-2xl font-black font-mono"
-        >
-          ${jackpot.toLocaleString()}
-        </motion.p>
-        <p className="text-zinc-600 text-[9px]">0.1% chance on any win</p>
-      </div>
-
       {/* Jackpot winner celebration */}
       <AnimatePresence>
         {jackpotWinner && (

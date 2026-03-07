@@ -78,16 +78,20 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
   useEffect(() => { balanceRef.current = balance; }, [balance]);
   useEffect(() => { autoSpinRef.current = autoSpin; }, [autoSpin]);
 
-  // Jackpot ticker — slowly increments to simulate contributions from other players
+  // Jackpot ticker — slowly counts up with small random increments
+  // Resets to real value when server sends an update
   useEffect(() => {
     const ticker = setInterval(() => {
       setJackpotDisplay(prev => {
         const real = currentJackpot;
-        // Smoothly approach the real value, or tick up slowly if stale
-        if (Math.abs(prev - real) > 50) return prev + Math.sign(real - prev) * Math.ceil(Math.abs(real - prev) * 0.1);
-        return prev + Math.floor(Math.random() * 3) + 1;
+        // If server value jumped (jackpot won / reset), snap toward it
+        if (real < prev - 500) return prev - Math.ceil((prev - real) * 0.15);
+        // If server is ahead, catch up
+        if (real > prev + 50) return prev + Math.ceil((real - prev) * 0.1);
+        // Slow cosmetic rise: +$1-5 every 2-4 seconds
+        return prev + Math.floor(Math.random() * 5) + 1;
       });
-    }, 150);
+    }, 2500);
     return () => clearInterval(ticker);
   }, []);
 
