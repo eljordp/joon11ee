@@ -6,8 +6,10 @@ import { sounds } from '@/lib/sounds';
 import PartySocket from 'partysocket';
 import BetControls from './BetControls';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
+import SpectatorBadge from './SpectatorBadge';
 import type { ChatMessage } from '@/lib/multiplayer/types';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
@@ -62,6 +64,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
@@ -69,6 +72,8 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
   const [result, setResult] = useState<{ text: string; sub: string; win: boolean | null } | null>(null);
   const [diceRolling, setDiceRolling] = useState(false);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -76,15 +81,16 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
     passwordRef.current = password;
     setAuthError(undefined);
+    setIsSpectating(false);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'hood-craps', room: id });
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current, ...(spectate ? { spectate: true } : {}) }));
     });
     ws.addEventListener('message', (evt) => {
       const data = JSON.parse(evt.data);
@@ -155,9 +161,27 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         }]);
         break;
       }
+      case 'reaction': {
+        const emoji = String(data.emoji || '');
+        if (emoji) {
+          const id = Date.now() + Math.random();
+          const x = 10 + Math.random() * 80;
+          setFloatingReactions(prev => [...prev, { id, emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2500);
+        }
+        break;
+      }
       case 'auth_error': {
         setAuthError(data.message as string);
         setConnected(false);
+        break;
+      }
+      case 'spectator_count': {
+        setSpectatorCount(data.count as number);
+        break;
+      }
+      case 'joined_as_spectator': {
+        setIsSpectating(true);
         break;
       }
     }
@@ -167,10 +191,12 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
 
   const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
   const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
+  const watchRoom = useCallback((code: string, password?: string) => connectToRoom(code, password, true), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
     setResult(null); setChatMessages([]); prevPhaseRef.current = '';
+    setIsSpectating(false); setSpectatorCount(0);
   }, []);
 
   const placeBet = useCallback((betType: string) => {
@@ -188,6 +214,10 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
   }, []);
 
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
+  }, []);
+
   if (!connected || !serverState) {
     return (
       <div className="space-y-4">
@@ -196,7 +226,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
           <span className="text-[10px] font-bold px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 tracking-wider uppercase">7s n 10s</span>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play</p>
           <p className="text-zinc-700 text-xs">Street dice. 7s n 10s. No cap.</p>
@@ -222,7 +252,8 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       {/* Roll history */}
       {rollHistory.length > 0 && (
@@ -262,6 +293,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
         <div className="lg:col-span-2 space-y-3">
           {/* Dice display */}
           <div className="relative border border-white/[0.04] bg-black p-6 sm:p-8 text-center min-h-[180px] flex flex-col items-center justify-center">
+            <FloatingReactions reactions={floatingReactions} />
             {/* Payout reference */}
             <div className="absolute top-3 right-3 flex flex-wrap gap-1.5 justify-end">
               {Object.entries(BET_LABELS).map(([key, info]) => (
@@ -334,7 +366,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
           </AnimatePresence>
 
           {/* Bet controls */}
-          {isBetting && (
+          {isBetting && !isSpectating && (
             <div className="space-y-3">
               <CountdownTimer totalSeconds={8} remainingSeconds={bettingTimeLeft} label="Street bets" />
               <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
@@ -350,9 +382,14 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
               </div>
             </div>
           )}
+          {isBetting && isSpectating && (
+            <div className="text-center text-blue-400/70 text-xs py-3 tracking-wider uppercase">
+              watching the action...
+            </div>
+          )}
 
           {/* Roll button for shooter */}
-          {isRolling && isShooter && (
+          {isRolling && isShooter && !isSpectating && (
             <button onClick={rollDice}
               className="w-full bg-red-600 text-white py-5 text-base font-black tracking-widest uppercase hover:bg-red-500 transition-all animate-pulse shadow-[0_0_30px_rgba(220,38,38,0.3)]"
             >
@@ -424,6 +461,9 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+            <EmotePicker onSelect={sendReaction} disabled={!connected} />
+          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>

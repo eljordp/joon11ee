@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { sounds } from '@/lib/sounds';
 import PartySocket from 'partysocket';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
+import SpectatorBadge from './SpectatorBadge';
 import type { ChatMessage } from '@/lib/multiplayer/types';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
@@ -72,6 +74,7 @@ function TileView({ tile, onClick, playable, small }: { tile: DominoTile; onClic
 export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
@@ -79,6 +82,8 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
   const [selectedTile, setSelectedTile] = useState<number | null>(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(0);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -86,14 +91,15 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
     passwordRef.current = password;
     setAuthError(undefined);
+    setIsSpectating(false);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'dominoes', room: id });
     ws.addEventListener('open', () => {
       setConnected(true); setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🁣', password: passwordRef.current }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🁣', password: passwordRef.current, ...(spectate ? { spectate: true } : {}) }));
     });
     ws.addEventListener('message', (evt) => handleServerMessage(JSON.parse(evt.data), ws.id));
     ws.addEventListener('close', () => setConnected(false));
@@ -140,11 +146,23 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
         }]);
         break;
       }
+      case 'reaction': {
+        const emoji = String(data.emoji || '');
+        if (emoji) {
+          const id = Date.now() + Math.random();
+          const x = 10 + Math.random() * 80;
+          setFloatingReactions(prev => [...prev, { id, emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2500);
+        }
+        break;
+      }
       case 'auth_error': {
         setAuthError(data.message as string);
         setConnected(false);
         break;
       }
+      case 'spectator_count': setSpectatorCount(data.count as number); break;
+      case 'joined_as_spectator': setIsSpectating(true); break;
     }
   }, [onWin, onLose, onLeaderboardEntry]);
 
@@ -152,10 +170,11 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
 
   const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
   const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
+  const watchRoom = useCallback((code: string, password?: string) => connectToRoom(code, password, true), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
-    setChatMessages([]); prevPhaseRef.current = '';
+    setChatMessages([]); prevPhaseRef.current = ''; setIsSpectating(false); setSpectatorCount(0);
   }, []);
 
   const toggleReady = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'ready' })); sounds.click(); }, []);
@@ -173,6 +192,10 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
 
   const sendChat = useCallback((text: string) => { wsRef.current?.send(JSON.stringify({ type: 'chat', text })); }, []);
 
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
+  }, []);
+
   if (!connected || !serverState) {
     return (
       <div className="space-y-4">
@@ -180,7 +203,7 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
           <h3 className="text-xl font-bold text-white">Dominoes</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} onWatch={watchRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play dominoes</p>
           <p className="text-zinc-700 text-xs">2-4 players, play to 100 points</p>
@@ -218,12 +241,14 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
         <span className="text-zinc-600 text-xs">Round #{roundNumber} · Target: {targetScore}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} onWatch={watchRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2 space-y-3">
           {/* Board */}
-          <div className="border border-white/[0.04] bg-black p-4 min-h-[120px]">
+          <div className="relative border border-white/[0.04] bg-black p-4 min-h-[120px]">
+            <FloatingReactions reactions={floatingReactions} />
             {board.length === 0 ? (
               <div className="flex items-center justify-center h-20 text-zinc-700 text-xs tracking-wider uppercase">
                 {phase === 'playing' ? 'First tile...' : 'Board empty'}
@@ -249,7 +274,7 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
           )}
 
           {/* My hand */}
-          {phase === 'playing' && (
+          {phase === 'playing' && !isSpectating && (
             <div className="border border-white/[0.04] bg-zinc-950/50 p-3 sm:p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold">Your Hand ({myHand.length})</span>
@@ -315,7 +340,7 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
               <p className="text-zinc-500 text-sm">
                 {players.length < 2 ? 'Need at least 2 players' : `${readyPlayers.length}/${players.length} ready`}
               </p>
-              {players.length >= 2 && (
+              {!isSpectating && players.length >= 2 && (
                 <button onClick={toggleReady}
                   className={`px-6 py-3 text-sm font-bold tracking-widest uppercase transition-all ${
                     readyPlayers.includes(myId!) ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
@@ -372,6 +397,9 @@ export default function MultiplayerDominoes({ balance, onWin, onLose, onLeaderbo
             </div>
           )}
 
+          <div className="flex items-center gap-2">
+            <EmotePicker onSelect={sendReaction} disabled={!connected} />
+          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>

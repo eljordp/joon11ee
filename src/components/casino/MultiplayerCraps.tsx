@@ -6,8 +6,10 @@ import { sounds } from '@/lib/sounds';
 import PartySocket from 'partysocket';
 import BetControls from './BetControls';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
+import SpectatorBadge from './SpectatorBadge';
 import type { ChatMessage } from '@/lib/multiplayer/types';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
@@ -61,6 +63,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
@@ -69,6 +72,8 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const [diceRolling, setDiceRolling] = useState(false);
   const [outcomeLabel, setOutcomeLabel] = useState<{ text: string; color: string } | null>(null);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -77,15 +82,16 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
     passwordRef.current = password;
     setAuthError(undefined);
+    setIsSpectating(!!spectate);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'craps', room: id });
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎲', password: passwordRef.current, spectate: !!spectate }));
     });
     ws.addEventListener('message', (evt) => {
       const data = JSON.parse(evt.data);
@@ -172,6 +178,24 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         }]);
         break;
       }
+      case 'reaction': {
+        const emoji = String(data.emoji || '');
+        if (emoji) {
+          const id = Date.now() + Math.random();
+          const x = 10 + Math.random() * 80;
+          setFloatingReactions(prev => [...prev, { id, emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2500);
+        }
+        break;
+      }
+      case 'spectator_count': {
+        setSpectatorCount(data.count as number);
+        break;
+      }
+      case 'joined_as_spectator': {
+        setIsSpectating(true);
+        break;
+      }
       case 'auth_error': {
         setAuthError(data.message as string);
         setConnected(false);
@@ -184,11 +208,12 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
 
   const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
   const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
+  const watchRoom = useCallback((code: string, password?: string) => connectToRoom(code, password, true), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
     setResult(null); setChatMessages([]); prevPhaseRef.current = '';
-    setOutcomeLabel(null);
+    setOutcomeLabel(null); setIsSpectating(false); setSpectatorCount(0);
   }, []);
 
   // Track total wagered this round locally to prevent over-betting
@@ -220,6 +245,10 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
   }, []);
 
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
+  }, []);
+
   if (!connected || !serverState) {
     return (
       <div className="space-y-4">
@@ -227,7 +256,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           <h3 className="text-xl font-bold text-white">Craps</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-10 text-center">
           <div className="text-5xl mb-4">🎲</div>
           <p className="text-zinc-400 text-sm font-bold mb-1">Roll the bones</p>
@@ -265,7 +294,8 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
         </div>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       {/* Roll history strip */}
       {rollHistory.length > 0 && (
@@ -332,6 +362,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
             phase === 'results' && result?.win === false ? 'border-red-500/20' :
             'border-white/[0.04]'
           }`}>
+            <FloatingReactions reactions={floatingReactions} />
             {/* Background glow on results */}
             {phase === 'results' && result && (
               <div className={`absolute inset-0 pointer-events-none ${
@@ -466,7 +497,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           </AnimatePresence>
 
           {/* Bet controls */}
-          {isBetting && (
+          {isBetting && !isSpectating && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="flex-1">
@@ -536,7 +567,7 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
           )}
 
           {/* Roll button for shooter (auto-rolls in 2s if not clicked) */}
-          {isRolling && isShooter && !diceRolling && (
+          {isRolling && isShooter && !diceRolling && !isSpectating && (
             <motion.button
               onClick={rollDice}
               initial={{ scale: 0.95 }}
@@ -710,6 +741,9 @@ export default function MultiplayerCraps({ balance, onWin, onLose, onLeaderboard
             </div>
           )}
 
+          <div className="flex items-center gap-2">
+            <EmotePicker onSelect={sendReaction} disabled={!connected} />
+          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>

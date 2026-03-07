@@ -89,6 +89,7 @@ const BB = 100;
 
 export default class PokerServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   seats: PokerPlayer[] = [];
   deck: Card[] = [];
   state: PokerState;
@@ -111,9 +112,16 @@ export default class PokerServer implements Party.Server {
   onConnect(conn: Party.Connection) {
     conn.send(JSON.stringify({ type: 'state', state: this.sanitize(conn.id) }));
     conn.send(JSON.stringify({ type: 'players', players: [...this.players.values()] }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
   }
 
   onClose(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
     const player = this.players.get(conn.id);
     this.players.delete(conn.id);
     this.state.readyPlayers = this.state.readyPlayers.filter(id => id !== conn.id);
@@ -156,6 +164,13 @@ export default class PokerServer implements Party.Server {
         if (p) this.broadcast({ type: 'chat', playerId: sender.id, playerName: p.name, avatar: p.avatar, text: String(data.text || '').slice(0, 100) });
         break;
       }
+      case 'reaction': {
+        const p = this.players.get(sender.id);
+        if (!p) break;
+        const emoji = String(data.emoji || '').slice(0, 4);
+        if (emoji) this.broadcast({ type: 'reaction', playerId: sender.id, playerName: p.name, emoji });
+        break;
+      }
     }
   }
 
@@ -171,12 +186,21 @@ export default class PokerServer implements Party.Server {
     const player: Player = { id: conn.id, name: (data.name as string) || 'Anon', avatar: (data.avatar as string) || '🎮' };
     this.players.set(conn.id, player);
     if (!this.hostId) this.hostId = conn.id;
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      conn.send(JSON.stringify({ type: 'state', state: this.sanitize(conn.id) }));
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
     this.broadcast({ type: 'player_joined', player });
     this.broadcastPlayers();
     this.broadcastState();
   }
 
   private handleReady(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'waiting') return;
     if (this.state.readyPlayers.includes(conn.id)) {
       this.state.readyPlayers = this.state.readyPlayers.filter(id => id !== conn.id);
@@ -190,6 +214,7 @@ export default class PokerServer implements Party.Server {
   }
 
   private handleAction(conn: Party.Connection, action: string, amount?: number) {
+    if (this.spectators.has(conn.id)) return;
     const isBetting = ['pre_flop', 'flop_betting', 'turn_betting', 'river_betting'].includes(this.state.phase);
     if (!isBetting) return;
     const seatIdx = this.seats.findIndex(s => s.id === conn.id);

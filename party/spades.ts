@@ -40,6 +40,7 @@ const TURN_DURATION = 15;
 
 export default class SpadesServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   playerOrder: string[] = [];
   hands = new Map<string, Card[]>();
   state: SpadesState;
@@ -61,9 +62,16 @@ export default class SpadesServer implements Party.Server {
   onConnect(conn: Party.Connection) {
     conn.send(JSON.stringify({ type: 'state', state: this.sanitize(conn.id) }));
     conn.send(JSON.stringify({ type: 'players', players: this.getPlayerList() }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
   }
 
   onClose(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
     const player = this.players.get(conn.id);
     this.players.delete(conn.id);
     this.playerOrder = this.playerOrder.filter(id => id !== conn.id);
@@ -96,6 +104,13 @@ export default class SpadesServer implements Party.Server {
         if (p) this.broadcast({ type: 'chat', playerId: sender.id, playerName: p.name, avatar: p.avatar, text: String(data.text || '').slice(0, 100) });
         break;
       }
+      case 'reaction': {
+        const p = this.players.get(sender.id);
+        if (!p) break;
+        const emoji = String(data.emoji || '').slice(0, 4);
+        if (emoji) this.broadcast({ type: 'reaction', playerId: sender.id, playerName: p.name, emoji });
+        break;
+      }
     }
   }
 
@@ -112,12 +127,21 @@ export default class SpadesServer implements Party.Server {
     this.players.set(conn.id, player);
     if (!this.hostId) this.hostId = conn.id;
     if (!this.playerOrder.includes(conn.id)) this.playerOrder.push(conn.id);
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      conn.send(JSON.stringify({ type: 'state', state: this.sanitize(conn.id) }));
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
     this.broadcast({ type: 'player_joined', player });
     this.broadcastPlayers();
     this.broadcastState();
   }
 
   private handleReady(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'waiting') return;
     if (this.state.readyPlayers.includes(conn.id)) {
       this.state.readyPlayers = this.state.readyPlayers.filter(id => id !== conn.id);
@@ -131,6 +155,7 @@ export default class SpadesServer implements Party.Server {
   }
 
   private handleBid(conn: Party.Connection, amount: number) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'bidding') return;
     const seatIdx = this.playerOrder.indexOf(conn.id);
     if (seatIdx !== this.state.activePlayerIndex) return;
@@ -151,6 +176,7 @@ export default class SpadesServer implements Party.Server {
   }
 
   private handlePlayCard(conn: Party.Connection, suit: string, rank: string) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'playing') return;
     const seatIdx = this.playerOrder.indexOf(conn.id);
     if (seatIdx !== this.state.activePlayerIndex) return;

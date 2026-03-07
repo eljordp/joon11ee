@@ -1,5 +1,50 @@
 let ctx: AudioContext | null = null;
 
+const MUTE_KEY = 'joon11ee_sound_muted';
+let muted = typeof window !== 'undefined' ? localStorage.getItem(MUTE_KEY) === 'true' : false;
+
+export function isMuted(): boolean { return muted; }
+export function toggleMute(): boolean {
+  muted = !muted;
+  if (typeof window !== 'undefined') localStorage.setItem(MUTE_KEY, String(muted));
+  if (muted) stopAmbient();
+  return muted;
+}
+
+let ambientSource: AudioBufferSourceNode | null = null;
+let ambientGain: GainNode | null = null;
+
+export function startAmbient() {
+  if (muted || ambientSource) return;
+  try {
+    const c = getCtx();
+    const duration = 4;
+    const buffer = c.createBuffer(1, c.sampleRate * duration, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.008;
+    }
+    ambientSource = c.createBufferSource();
+    ambientSource.buffer = buffer;
+    ambientSource.loop = true;
+    ambientGain = c.createGain();
+    ambientGain.gain.value = 0.03;
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+    ambientSource.connect(filter);
+    filter.connect(ambientGain);
+    ambientGain.connect(c.destination);
+    ambientSource.start();
+  } catch {}
+}
+
+export function stopAmbient() {
+  try { ambientSource?.stop(); } catch {}
+  ambientSource = null;
+  ambientGain = null;
+}
+
 function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext();
   if (ctx.state === 'suspended') ctx.resume();
@@ -7,6 +52,7 @@ function getCtx(): AudioContext {
 }
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', volume = 0.15, delay = 0) {
+  if (muted) return;
   try {
     const c = getCtx();
     const osc = c.createOscillator();
@@ -23,6 +69,7 @@ function playTone(freq: number, duration: number, type: OscillatorType = 'sine',
 }
 
 function playNoise(duration: number, volume = 0.05) {
+  if (muted) return;
   try {
     const c = getCtx();
     const bufferSize = c.sampleRate * duration;

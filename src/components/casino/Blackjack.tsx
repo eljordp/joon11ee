@@ -103,6 +103,13 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
   const [activeSplitIndex, setActiveSplitIndex] = useState(0);
   const [splitDoubled, setSplitDoubled] = useState<boolean[]>([false, false]);
   const [splitResults, setSplitResults] = useState<Array<{ text: string; win: boolean | null }> | null>(null);
+  // Insurance state
+  const [showInsurance, setShowInsurance] = useState(false);
+  const [insuranceBet, setInsuranceBet] = useState<number | null>(null);
+  // Side bets state
+  const [perfectPairsBet, setPerfectPairsBet] = useState(0);
+  const [twentyOnePlusThreeBet, setTwentyOnePlusThreeBet] = useState(0);
+  const [sideBetResults, setSideBetResults] = useState<Array<{ name: string; win: number }> | null>(null);
 
   const updateStats = useCallback((outcome: 'win' | 'loss' | 'push', amount: number) => {
     setStats(prev => {
@@ -126,6 +133,31 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
       };
     });
   }, []);
+
+  // Side bet evaluation helpers
+  const evaluatePerfectPairs = (c1: Card, c2: Card): number => {
+    if (c1.rank !== c2.rank) return 0;
+    if (c1.suit === c2.suit) return 30; // Perfect pair
+    const redSuits = ['♥', '♦'];
+    if (redSuits.includes(c1.suit) === redSuits.includes(c2.suit)) return 10; // Colored pair
+    return 5; // Mixed pair
+  };
+
+  const evaluate21Plus3 = (c1: Card, c2: Card, c3: Card): number => {
+    const cards = [c1, c2, c3];
+    const ranks = cards.map(c => c.value).sort((a, b) => a - b);
+    const suits = cards.map(c => c.suit);
+    const allSameSuit = suits[0] === suits[1] && suits[1] === suits[2];
+    const allSameRank = c1.rank === c2.rank && c2.rank === c3.rank;
+    const isStraight = (ranks[2] - ranks[1] === 1 && ranks[1] - ranks[0] === 1) ||
+      (ranks[0] === 1 && ranks[1] === 12 && ranks[2] === 13); // A-Q-K
+    if (allSameRank && allSameSuit) return 100; // Suited trips
+    if (isStraight && allSameSuit) return 40; // Straight flush
+    if (allSameRank) return 30; // Three of a kind
+    if (isStraight) return 10; // Straight
+    if (allSameSuit) return 5; // Flush
+    return 0;
+  };
 
   // Provably fair state
   const [serverSeed, setServerSeed] = useState('');
@@ -162,6 +194,9 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
     setActiveSplitIndex(0);
     setPlayerHand([]);
     setDealerHand([]);
+    setShowInsurance(false);
+    setInsuranceBet(null);
+    setSideBetResults(null);
 
     // Use the current seeds to create the deck
     const currentServerSeed = serverSeed;
@@ -180,11 +215,43 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
       setTimeout(() => sounds.cardDeal(), 350);
       setTimeout(() => sounds.cardDeal(), 500);
 
+      // Evaluate side bets immediately
+      const sbResults: Array<{ name: string; win: number }> = [];
+      if (perfectPairsBet > 0) {
+        const mult = evaluatePerfectPairs(pHand[0], pHand[1]);
+        if (mult > 0) {
+          const winAmt = perfectPairsBet * mult;
+          sbResults.push({ name: `Perfect Pairs ${mult}:1`, win: winAmt });
+          onWin(winAmt, perfectPairsBet);
+        } else {
+          sbResults.push({ name: 'Perfect Pairs', win: -perfectPairsBet });
+          onLose(perfectPairsBet);
+        }
+      }
+      if (twentyOnePlusThreeBet > 0) {
+        const mult = evaluate21Plus3(pHand[0], pHand[1], dHand[0]);
+        if (mult > 0) {
+          const winAmt = twentyOnePlusThreeBet * mult;
+          sbResults.push({ name: `21+3 ${mult}:1`, win: winAmt });
+          onWin(winAmt, twentyOnePlusThreeBet);
+        } else {
+          sbResults.push({ name: '21+3', win: -twentyOnePlusThreeBet });
+          onLose(twentyOnePlusThreeBet);
+        }
+      }
+      if (sbResults.length > 0) setSideBetResults(sbResults);
+
+      // Check for insurance offer (dealer shows Ace)
+      if (dHand[0].rank === 'A' && handValue(pHand) !== 21) {
+        setShowInsurance(true);
+        return; // Wait for insurance decision before continuing
+      }
+
       if (handValue(pHand) === 21) {
         finishGame(pHand, dHand, newDeck, false, currentServerSeed);
       }
     }, 900);
-  }, [balance, bet, serverSeed, clientSeed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [balance, bet, serverSeed, clientSeed, perfectPairsBet, twentyOnePlusThreeBet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hit = useCallback(() => {
     sounds.cardDeal();
@@ -343,6 +410,17 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         setGameState('done');
         setRevealedSeed(seed);
 
+        // Resolve insurance
+        if (insuranceBet !== null && insuranceBet > 0) {
+          const dealerHasBJ = handValue(newDealerHand) === 21 && newDealerHand.length === 2;
+          if (dealerHasBJ) {
+            onWin(insuranceBet * 3, insuranceBet); // 2:1 payout + original back
+          } else {
+            onLose(insuranceBet);
+          }
+          setInsuranceBet(null);
+        }
+
         if (splits) {
           // Evaluate each split hand
           const hand1Bet = splitDoubled[0] ? bet * 2 : bet;
@@ -424,6 +502,9 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
           <div className="flex items-center gap-2">
             {doubled && gameState !== 'betting' && gameState !== 'shuffling' && (
               <span className="text-xs font-bold px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 text-yellow-400">2x</span>
+            )}
+            {insuranceBet !== null && insuranceBet > 0 && (
+              <span className="text-xs font-bold px-2 py-1 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400/70">INS</span>
             )}
             {stats.streak !== 0 && (
               <span className={`text-xs font-bold px-2 py-1 ${stats.streak > 0 ? 'bg-green-500/20 border border-green-500/30 text-green-400' : 'bg-red-500/20 border border-red-500/30 text-red-400'}`}>
@@ -602,6 +683,17 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
             <p className={`text-xs mt-1 ${result.win === true ? 'text-green-500/70' : result.win === false ? 'text-zinc-600' : 'text-yellow-500/70'}`}>
               {result.sub}
             </p>
+            {sideBetResults && sideBetResults.length > 0 && (
+              <div className="flex gap-2 justify-center mt-2">
+                {sideBetResults.map((sb, i) => (
+                  <span key={i} className={`text-[10px] font-bold px-2 py-0.5 border ${
+                    sb.win > 0 ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/20 text-red-400/60'
+                  }`}>
+                    {sb.name}: {sb.win > 0 ? `+$${sb.win.toLocaleString()}` : `-$${Math.abs(sb.win).toLocaleString()}`}
+                  </span>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -612,12 +704,58 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
           <div className="mb-4">
             <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
           </div>
+
+          {/* Side bets */}
+          <div className="mb-4 border border-white/[0.04] p-3">
+            <p className="text-zinc-500 text-[10px] font-bold tracking-wider uppercase mb-2">Side Bets (optional)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-zinc-600 text-[9px] mb-1">Perfect Pairs (5-30:1)</p>
+                <div className="flex gap-1">
+                  {[0, 25, 50, 100].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setPerfectPairsBet(v)}
+                      disabled={v > 0 && balance < bet + v + twentyOnePlusThreeBet}
+                      className={`px-2 py-1 text-[10px] font-bold transition-all ${
+                        perfectPairsBet === v
+                          ? 'bg-purple-600 text-white'
+                          : 'border border-white/10 text-zinc-500 hover:text-white disabled:opacity-30'
+                      }`}
+                    >
+                      {v === 0 ? 'Off' : `$${v}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-zinc-600 text-[9px] mb-1">21+3 (5-100:1)</p>
+                <div className="flex gap-1">
+                  {[0, 25, 50, 100].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setTwentyOnePlusThreeBet(v)}
+                      disabled={v > 0 && balance < bet + v + perfectPairsBet}
+                      className={`px-2 py-1 text-[10px] font-bold transition-all ${
+                        twentyOnePlusThreeBet === v
+                          ? 'bg-blue-600 text-white'
+                          : 'border border-white/10 text-zinc-500 hover:text-white disabled:opacity-30'
+                      }`}
+                    >
+                      {v === 0 ? 'Off' : `$${v}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <button
             onClick={deal}
-            disabled={balance < bet}
+            disabled={balance < bet + perfectPairsBet + twentyOnePlusThreeBet}
             className="w-full bg-red-600 text-white py-4 text-sm font-bold tracking-widest uppercase hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            DEAL
+            DEAL{perfectPairsBet + twentyOnePlusThreeBet > 0 ? ` (+ $${(perfectPairsBet + twentyOnePlusThreeBet).toLocaleString()} side)` : ''}
           </button>
         </>
       )}
@@ -628,7 +766,51 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
         </div>
       )}
 
-      {gameState === 'playing' && (
+      {/* Insurance prompt */}
+      <AnimatePresence>
+        {showInsurance && gameState === 'playing' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-4 border border-yellow-500/30 bg-yellow-500/5 p-4 text-center"
+          >
+            <p className="text-yellow-400 text-xs font-bold tracking-wider uppercase mb-1">Insurance?</p>
+            <p className="text-zinc-500 text-[10px] mb-3">Dealer shows Ace. Bet ${Math.floor(bet / 2).toLocaleString()} for 2:1 if dealer has blackjack.</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => {
+                  const insBet = Math.floor(bet / 2);
+                  if (balance >= insBet) {
+                    setInsuranceBet(insBet);
+                  }
+                  setShowInsurance(false);
+                  if (handValue(playerHand) === 21) {
+                    finishGame(playerHand, dealerHand, deck, false, serverSeed);
+                  }
+                }}
+                disabled={balance < Math.floor(bet / 2)}
+                className="px-4 py-2 bg-yellow-600 text-white text-[10px] font-bold tracking-wider uppercase hover:bg-yellow-500 transition-all disabled:opacity-30"
+              >
+                Yes (${Math.floor(bet / 2).toLocaleString()})
+              </button>
+              <button
+                onClick={() => {
+                  setShowInsurance(false);
+                  if (handValue(playerHand) === 21) {
+                    finishGame(playerHand, dealerHand, deck, false, serverSeed);
+                  }
+                }}
+                className="px-4 py-2 border border-white/10 text-zinc-400 text-[10px] font-bold tracking-wider uppercase hover:text-white transition-all"
+              >
+                No
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {gameState === 'playing' && !showInsurance && (
         <div className={`grid ${canDouble && canSplit ? 'grid-cols-4' : canDouble || canSplit ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
           <button
             onClick={hit}
@@ -681,6 +863,9 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
                 setSplitDoubled([false, false]);
                 setSplitResults(null);
                 setActiveSplitIndex(0);
+                setInsuranceBet(null);
+                setShowInsurance(false);
+                setSideBetResults(null);
                 prepSeed();
                 // Auto-deal after tiny delay for seed prep
                 setGameState('shuffling');
@@ -718,6 +903,9 @@ export default function Blackjack({ balance, onWin, onLose }: Props) {
               setSplitDoubled([false, false]);
               setSplitResults(null);
               setActiveSplitIndex(0);
+              setInsuranceBet(null);
+              setShowInsurance(false);
+              setSideBetResults(null);
               prepSeed();
             }}
             className={`${lastBet && balance >= lastBet ? 'border border-white/20 text-white hover:bg-white/5' : 'bg-red-600 text-white hover:bg-red-500 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)]'} py-4 text-sm font-bold tracking-widest uppercase transition-all`}

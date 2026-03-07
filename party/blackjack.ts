@@ -75,6 +75,7 @@ const RESULTS_DURATION = 4;
 
 export default class BlackjackServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   seatMap = new Map<string, number>(); // playerId -> seatIndex
   state: GameState;
   deck: Card[] = [];
@@ -84,6 +85,7 @@ export default class BlackjackServer implements Party.Server {
   hostId: string | null = null;
   roomPassword: string | null = null;
   lastBets = new Map<string, number>(); // playerId -> last bet amount
+  tableHistory: { round: number; players: { name: string; bet: number; profit: number }[] }[] = [];
 
   constructor(readonly room: Party.Room) {
     this.state = this.emptyState();
@@ -118,9 +120,21 @@ export default class BlackjackServer implements Party.Server {
   onConnect(conn: Party.Connection) {
     conn.send(JSON.stringify({ type: "state", state: this.sanitizeState(conn.id) }));
     conn.send(JSON.stringify({ type: "players", players: Array.from(this.players.values()) }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
+    if (this.tableHistory.length > 0) {
+      conn.send(JSON.stringify({ type: "table_history", history: this.tableHistory }));
+    }
   }
 
   onClose(conn: Party.Connection) {
+    // Handle spectator leaving
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
+
     const player = this.players.get(conn.id);
     if (player) {
       // Clear their seat
@@ -143,12 +157,12 @@ export default class BlackjackServer implements Party.Server {
 
     // Transfer host if needed
     if (conn.id === this.hostId) {
-      const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot);
+      const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot && !this.spectators.has(p.id));
       this.hostId = realPlayers.length > 0 ? realPlayers[0].id : null;
     }
 
-    // Check if any real (non-bot) players remain
-    const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot);
+    // Check if any real (non-bot, non-spectator) players remain
+    const realPlayers = Array.from(this.players.values()).filter((p) => !p.isBot && !this.spectators.has(p.id));
     if (realPlayers.length === 0) {
       this.stopAllTimers();
       this.removeBots();
@@ -202,6 +216,16 @@ export default class BlackjackServer implements Party.Server {
     };
     this.players.set(conn.id, player);
 
+    // Spectator mode
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      conn.send(JSON.stringify({ type: "state", state: this.sanitizeState(conn.id) }));
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
+
     // First real player becomes host
     if (!this.hostId) {
       this.hostId = conn.id;
@@ -220,6 +244,7 @@ export default class BlackjackServer implements Party.Server {
   private handleTakeSeat(conn: Party.Connection, data: Record<string, unknown>) {
     const player = this.players.get(conn.id);
     if (!player) return;
+    if (this.spectators.has(conn.id)) return; // Spectators can't sit
     if (this.seatMap.has(conn.id)) return; // Already seated
 
     const seatIdx = Number(data.seatIndex);
@@ -330,11 +355,10 @@ export default class BlackjackServer implements Party.Server {
   private handleReaction(conn: Party.Connection, data: Record<string, unknown>) {
     const player = this.players.get(conn.id);
     if (!player) return;
-    const seatIdx = this.seatMap.get(conn.id);
-    if (seatIdx === undefined) return;
     const emoji = String(data.emoji || "").slice(0, 4);
     if (!emoji) return;
-    this.broadcast({ type: "reaction", seatIndex: seatIdx, emoji, playerId: conn.id });
+    const seatIdx = this.seatMap.get(conn.id);
+    this.broadcast({ type: "reaction", seatIndex: seatIdx ?? -1, emoji, playerId: conn.id, playerName: player.name });
   }
 
   private handleAddBot(conn: Party.Connection) {
@@ -714,6 +738,16 @@ export default class BlackjackServer implements Party.Server {
       if (seat.profit >= 500 && seat.player && !seat.player.isBot) {
         this.broadcastSystemChat(`${seat.player.name} won $${seat.profit}! 🔥`);
       }
+    }
+
+    // Store round in table history
+    const roundPlayers = this.state.seats
+      .filter(s => s.player && s.bet > 0 && !s.player.isBot)
+      .map(s => ({ name: s.player!.name, bet: s.bet, profit: s.profit }));
+    if (roundPlayers.length > 0) {
+      this.tableHistory.push({ round: this.state.roundNumber, players: roundPlayers });
+      if (this.tableHistory.length > 50) this.tableHistory.shift();
+      this.broadcast({ type: 'table_history', history: this.tableHistory });
     }
 
     this.broadcastState();

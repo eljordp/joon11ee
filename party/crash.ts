@@ -74,6 +74,7 @@ const BOT_COUNT = 8;
 
 export default class CrashServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   bots: BotProfile[] = [];
   botTimers: ReturnType<typeof setTimeout>[] = [];
   state: RoundState;
@@ -133,9 +134,16 @@ export default class CrashServer implements Party.Server {
         ...this.bots.map((b) => b.player),
       ],
     }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
   }
 
   onClose(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
     const player = this.players.get(conn.id);
     if (player) {
       this.players.delete(conn.id);
@@ -159,6 +167,13 @@ export default class CrashServer implements Party.Server {
       case "bet": this.handleBet(sender, data); break;
       case "cashout": this.handleCashout(sender); break;
       case "chat": this.handleChat(sender, data); break;
+      case "reaction": {
+        const p = this.players.get(sender.id);
+        if (!p) break;
+        const emoji = String(data.emoji || "").slice(0, 4);
+        if (emoji) this.broadcast({ type: "reaction", playerId: sender.id, playerName: p.name, emoji });
+        break;
+      }
     }
   }
 
@@ -176,6 +191,14 @@ export default class CrashServer implements Party.Server {
       avatar: (data.avatar as string) || "🎮",
     };
     this.players.set(conn.id, player);
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      conn.send(JSON.stringify({ type: "state", state: this.sanitizeState() }));
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
     if (!this.hostId) this.hostId = conn.id;
     this.broadcast({ type: "player_joined", player });
     this.broadcastPlayers();
@@ -186,6 +209,7 @@ export default class CrashServer implements Party.Server {
   }
 
   private handleBet(conn: Party.Connection, data: Record<string, unknown>) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== "betting") return;
     const player = this.players.get(conn.id);
     if (!player) return;
@@ -196,6 +220,7 @@ export default class CrashServer implements Party.Server {
   }
 
   private handleCashout(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== "flying") return;
     const bet = this.state.bets.find((b) => b.player.id === conn.id);
     if (!bet || bet.cashedOut) return;

@@ -6,8 +6,10 @@ import { sounds } from '@/lib/sounds';
 import { isRed, type Card } from '@/lib/casino';
 import PartySocket from 'partysocket';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
+import SpectatorBadge from './SpectatorBadge';
 import type { ChatMessage } from '@/lib/multiplayer/types';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
@@ -78,6 +80,7 @@ function SpadesCard({ card, onClick, playable, small }: { card: Card; onClick?: 
 export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboardEntry, username, initialRoom, gameId }: Props) {
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
@@ -85,6 +88,8 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
   const [turnTimeLeft, setTurnTimeLeft] = useState(0);
   const [selectedBid, setSelectedBid] = useState(3);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -92,14 +97,15 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
   useEffect(() => { if (username) playerName.current = username; }, [username]);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
     passwordRef.current = password;
     setAuthError(undefined);
+    setIsSpectating(!!spectate);
     const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'spades', room: id });
     ws.addEventListener('open', () => {
       setConnected(true); setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '♠️', password: passwordRef.current }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '♠️', password: passwordRef.current, spectate: !!spectate }));
     });
     ws.addEventListener('message', (evt) => handleServerMessage(JSON.parse(evt.data), ws.id));
     ws.addEventListener('close', () => setConnected(false));
@@ -146,9 +152,27 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
         }]);
         break;
       }
+      case 'reaction': {
+        const emoji = String(data.emoji || '');
+        if (emoji) {
+          const id = Date.now() + Math.random();
+          const x = 10 + Math.random() * 80;
+          setFloatingReactions(prev => [...prev, { id, emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2500);
+        }
+        break;
+      }
       case 'auth_error': {
         setAuthError(data.message as string);
         setConnected(false);
+        break;
+      }
+      case 'spectator_count': {
+        setSpectatorCount(data.count as number);
+        break;
+      }
+      case 'joined_as_spectator': {
+        setIsSpectating(true);
         break;
       }
     }
@@ -158,10 +182,12 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
 
   const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
   const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
+  const watchRoom = useCallback((code: string, password?: string) => connectToRoom(code, password, true), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null; setRoomId(null); setConnected(false); setServerState(null);
     setChatMessages([]); prevPhaseRef.current = '';
+    setIsSpectating(false); setSpectatorCount(0);
   }, []);
 
   const toggleReady = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'ready' })); sounds.click(); }, []);
@@ -174,6 +200,9 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
     sounds.cardFlip();
   }, []);
   const sendChat = useCallback((text: string) => { wsRef.current?.send(JSON.stringify({ type: 'chat', text })); }, []);
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
+  }, []);
 
   if (!connected || !serverState) {
     return (
@@ -182,7 +211,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           <h3 className="text-xl font-bold text-white">Spades</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
-        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+        <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play spades</p>
           <p className="text-zinc-700 text-xs">Exactly 4 players, 2v2 teams</p>
@@ -232,7 +261,9 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
         <span className="text-zinc-600 text-xs">Round #{roundNumber} · Trick {trickNumber}/13</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
+
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2 space-y-3">
@@ -252,7 +283,8 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           )}
 
           {/* Players & trick area */}
-          <div className="border border-white/[0.04] bg-black p-4 sm:p-6 min-h-[200px]">
+          <div className="relative border border-white/[0.04] bg-black p-4 sm:p-6 min-h-[200px]">
+            <FloatingReactions reactions={floatingReactions} />
             {/* Player positions */}
             <div className="grid grid-cols-4 gap-2 mb-4">
               {players.map((p, idx) => {
@@ -314,7 +346,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           )}
 
           {/* Bidding */}
-          {phase === 'bidding' && isMyTurn && (
+          {!isSpectating && phase === 'bidding' && isMyTurn && (
             <div className="space-y-3">
               <div className="flex items-center justify-center gap-2">
                 <span className="text-zinc-500 text-sm">Your bid:</span>
@@ -341,7 +373,7 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           )}
 
           {/* My hand */}
-          {(phase === 'playing' || phase === 'trick_result' || phase === 'bidding') && myHand.length > 0 && (
+          {!isSpectating && (phase === 'playing' || phase === 'trick_result' || phase === 'bidding') && myHand.length > 0 && (
             <div className="border border-white/[0.04] bg-zinc-950/50 p-3 sm:p-4">
               <span className="text-zinc-600 text-[10px] tracking-wider uppercase font-bold block mb-2">Your Hand</span>
               {!spadesBroken && phase === 'playing' && (
@@ -367,9 +399,9 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
           {phase === 'waiting' && (
             <div className="text-center space-y-3">
               <p className="text-zinc-500 text-sm">
-                {playerCount < 4 ? `Need 4 players (${playerCount}/4)` : `${readyPlayers.length}/4 ready`}
+                {isSpectating ? 'Watching game...' : playerCount < 4 ? `Need 4 players (${playerCount}/4)` : `${readyPlayers.length}/4 ready`}
               </p>
-              {playerCount === 4 && (
+              {!isSpectating && playerCount === 4 && (
                 <button onClick={toggleReady}
                   className={`px-6 py-3 text-sm font-bold tracking-widest uppercase transition-all ${
                     readyPlayers.includes(myId!) ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
@@ -422,6 +454,9 @@ export default function MultiplayerSpades({ balance, onWin, onLose, onLeaderboar
               ))}
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <EmotePicker onSelect={sendReaction} disabled={!connected} />
+          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>

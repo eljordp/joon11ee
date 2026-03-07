@@ -7,6 +7,9 @@ import { isRed, type Card } from '@/lib/casino';
 import PartySocket from 'partysocket';
 import BetControls from './BetControls';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker from './EmotePicker';
+import SpectatorBadge from './SpectatorBadge';
+import PlayerProfilePopup from './PlayerProfilePopup';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
 import type { ChatMessage } from '@/lib/multiplayer/types';
@@ -101,6 +104,10 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const [streakCelebration, setStreakCelebration] = useState<number | null>(null);
   const [reactions, setReactions] = useState<Map<number, { emoji: string; key: number }>>(new Map());
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
+  const [profilePlayer, setProfilePlayer] = useState<{ name: string; seatIndex: number } | null>(null);
+  const [tableHistory, setTableHistory] = useState<{ round: number; players: { name: string; bet: number; profit: number }[] }[]>([]);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -129,8 +136,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     });
   }, []);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
+    setIsSpectating(!!spectate);
 
     const ws = new PartySocket({
       host: PARTYKIT_HOST,
@@ -142,7 +150,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       setConnected(true);
       setMyId(ws.id);
       setAuthError(undefined);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password, spectate: !!spectate }));
     });
 
     ws.addEventListener('message', (evt) => {
@@ -257,10 +265,26 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
       case 'reaction': {
         const seatIdx = data.seatIndex as number;
-        const emojiMap: Record<string, string> = { fire: '🔥', skull: '💀', party: '🎉', shocked: '😱' };
-        const emoji = emojiMap[data.emoji as string] || '🔥';
-        setReactions(prev => { const next = new Map(prev); next.set(seatIdx, { emoji, key: Date.now() }); return next; });
-        setTimeout(() => setReactions(prev => { const next = new Map(prev); next.delete(seatIdx); return next; }), 2000);
+        const emoji = String(data.emoji || '🔥');
+        if (seatIdx >= 0) {
+          setReactions(prev => { const next = new Map(prev); next.set(seatIdx, { emoji, key: Date.now() }); return next; });
+          setTimeout(() => setReactions(prev => { const next = new Map(prev); next.delete(seatIdx); return next; }), 2000);
+        }
+        break;
+      }
+
+      case 'spectator_count': {
+        setSpectatorCount(data.count as number);
+        break;
+      }
+
+      case 'joined_as_spectator': {
+        setIsSpectating(true);
+        break;
+      }
+
+      case 'table_history': {
+        setTableHistory(data.history as typeof tableHistory);
         break;
       }
     }
@@ -274,6 +298,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
   const createRoom = useCallback((code?: string, password?: string) => connectToRoom(code || generateRoomCode(), password), [connectToRoom]);
   const joinRoom = useCallback((code: string, password?: string) => connectToRoom(code, password), [connectToRoom]);
+  const watchRoom = useCallback((code: string, password?: string) => connectToRoom(code, password, true), [connectToRoom]);
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null;
@@ -285,14 +310,16 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
     setHasBet(false);
     setResult(null);
     setChatMessages([]);
+    setIsSpectating(false);
+    setSpectatorCount(0);
     prevPhaseRef.current = '';
   }, []);
 
   const sitDown = useCallback((seatIndex: number) => {
-    if (!wsRef.current || seated) return;
+    if (!wsRef.current || seated || isSpectating) return;
     wsRef.current.send(JSON.stringify({ type: 'take_seat', seatIndex }));
     sounds.click();
-  }, [seated]);
+  }, [seated, isSpectating]);
 
   const placeBet = useCallback((amount?: number) => {
     const betAmount = amount || bet;
@@ -385,7 +412,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         <span className="text-zinc-600 text-xs">Round #{roundNumber}</span>
       </div>
 
-      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
+      <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={connected} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} onWatch={watchRoom} />
+
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       {/* Session stats */}
       {stats.hands > 0 && (
@@ -439,7 +468,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                   isEmpty ? 'border-dashed border-white/[0.06] hover:border-white/[0.12] cursor-pointer' :
                   'border-white/[0.06]'
                 }`}
-                onClick={() => { if (isEmpty && !seated) sitDown(idx); }}
+                onClick={() => { if (isEmpty && !seated && !isSpectating) sitDown(idx); }}
               >
                 {/* Reaction bubble */}
                 <AnimatePresence>
@@ -464,9 +493,12 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
                   <>
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="text-xs">{seat.player!.avatar}</span>
-                      <span className={`text-[10px] font-bold truncate ${isMe ? 'text-red-400' : 'text-zinc-400'}`}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (!isBot) setProfilePlayer({ name: seat.player!.name, seatIndex: idx }); }}
+                        className={`text-[10px] font-bold truncate ${isMe ? 'text-red-400' : 'text-zinc-400'} ${!isBot ? 'hover:underline cursor-pointer' : ''}`}
+                      >
                         {seat.player!.name}
-                      </span>
+                      </button>
                       {isBot && <span className="text-[8px] text-zinc-600 font-mono">BOT</span>}
                     </div>
                     {isHost && isBot && (
@@ -556,7 +588,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
       {/* Controls */}
       <div className="space-y-3">
-        {!seated && (
+        {!seated && !isSpectating && (
           <div className="text-center border border-dashed border-white/[0.08] py-6">
             <p className="text-zinc-500 text-sm mb-1">Click an empty seat to sit down</p>
             <p className="text-zinc-700 text-xs">{phase !== 'waiting' && phase !== 'betting' ? 'You\'ll play next round' : 'Pick your spot at the table'}</p>
@@ -615,25 +647,49 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
       {/* Reactions */}
       {seated && (
-        <div className="flex items-center justify-center gap-2">
-          {[
-            { key: 'fire', emoji: '🔥' },
-            { key: 'skull', emoji: '💀' },
-            { key: 'party', emoji: '🎉' },
-            { key: 'shocked', emoji: '😱' },
-          ].map(r => (
-            <button
-              key={r.key}
-              onClick={() => sendReaction(r.key)}
-              className="w-10 h-10 flex items-center justify-center text-lg border border-white/[0.06] hover:border-white/20 hover:bg-white/5 transition-all"
-            >
-              {r.emoji}
-            </button>
-          ))}
+        <div className="flex items-center justify-center">
+          <EmotePicker onSelect={sendReaction} />
         </div>
       )}
 
+      {/* Head-to-head table history */}
+      {tableHistory.length > 0 && connected && (() => {
+        const myName = username;
+        const h2h: Record<string, { hands: number; myProfit: number }> = {};
+        for (const round of tableHistory) {
+          const me = round.players.find(p => p.name === myName);
+          if (!me) continue;
+          for (const p of round.players) {
+            if (p.name === myName) continue;
+            if (!h2h[p.name]) h2h[p.name] = { hands: 0, myProfit: 0 };
+            h2h[p.name].hands++;
+            h2h[p.name].myProfit += me.profit;
+          }
+        }
+        const entries = Object.entries(h2h).filter(([, v]) => v.hands >= 2);
+        if (entries.length === 0) return null;
+        return (
+          <div className="border border-white/[0.04] p-3 flex flex-wrap gap-3">
+            <span className="text-zinc-600 text-[9px] uppercase tracking-wider">Table H2H:</span>
+            {entries.map(([name, v]) => (
+              <span key={name} className="text-[10px]">
+                <span className="text-zinc-400">vs @{name}:</span>{' '}
+                <span className="text-zinc-500">{v.hands}h</span>{' '}
+                <span className={v.myProfit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                  {v.myProfit >= 0 ? '+' : ''}${Math.abs(v.myProfit).toLocaleString()}
+                </span>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
+
       <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
+
+      <PlayerProfilePopup
+        player={profilePlayer}
+        onClose={() => setProfilePlayer(null)}
+      />
     </div>
   );
 }

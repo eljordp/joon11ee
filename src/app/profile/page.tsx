@@ -1,19 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSession, logout, updateProfile, addFriend, removeFriend, type UserData, type CasinoDayStat, type Friend } from '@/lib/auth';
 import { setUsername as saveUsername } from '@/lib/casino';
 import { getBookings, type Booking } from '@/lib/bookings';
+import { ACHIEVEMENTS, getUnlockedAchievements } from '@/lib/achievements';
 import { formatPrice } from '@/data/fleet';
 import AuthModal from '@/components/auth/AuthModal';
+import PartySocket from 'partysocket';
 import Link from 'next/link';
+import { generateRoomCode } from '@/components/casino/RoomControls';
+
+const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
+
+interface OnlineUser { username: string; game?: string; room?: string; }
 
 export default function ProfilePage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [authOpen, setAuthOpen] = useState(false);
-  const [tab, setTab] = useState<'casino' | 'friends' | 'rentals' | 'settings'>('casino');
+  const [tab, setTab] = useState<'casino' | 'achievements' | 'friends' | 'rentals' | 'settings'>('casino');
+  const [unlockedAchievements, setUnlockedAchievements] = useState<Record<string, string>>({});
 
   // Settings state
   const [editName, setEditName] = useState('');
@@ -25,6 +33,9 @@ export default function ProfilePage() {
   const [friendInput, setFriendInput] = useState('');
   const [friendError, setFriendError] = useState('');
   const [friendSuccess, setFriendSuccess] = useState('');
+  const [copiedChallenge, setCopiedChallenge] = useState<string | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, OnlineUser>>({});
+  const presenceRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
     const session = getSession();
@@ -34,6 +45,20 @@ export default function ProfilePage() {
       setEditName(session.user.name);
       setEditIG(session.user.instagram || '');
     }
+    setUnlockedAchievements(getUnlockedAchievements());
+  }, []);
+
+  // Connect to presence server for online status
+  useEffect(() => {
+    const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'presence', room: 'main' });
+    presenceRef.current = ws;
+    ws.addEventListener('message', (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'presence') setOnlineUsers(data.users || {});
+      else if (data.type === 'presence_update') setOnlineUsers(prev => ({ ...prev, [data.connId]: data.info }));
+      else if (data.type === 'presence_left') setOnlineUsers(prev => { const next = { ...prev }; delete next[data.connId]; return next; });
+    });
+    return () => { ws.close(); };
   }, []);
 
   const handleAuth = (data: UserData) => {
@@ -187,17 +212,26 @@ export default function ProfilePage() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-8 flex-wrap">
-          {(['casino', 'friends', 'rentals', 'settings'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
-                tab === t ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
-              }`}
-            >
-              {t === 'friends' ? `Friends${friends.length > 0 ? ` (${friends.length})` : ''}` : t === 'casino' ? 'Casino History' : t === 'rentals' ? 'Rental History' : 'Settings'}
-            </button>
-          ))}
+          {(['casino', 'achievements', 'friends', 'rentals', 'settings'] as const).map((t) => {
+            const labels: Record<string, string> = {
+              casino: 'Casino History',
+              achievements: `Badges (${Object.keys(unlockedAchievements).length}/${ACHIEVEMENTS.length})`,
+              friends: `Friends${friends.length > 0 ? ` (${friends.length})` : ''}`,
+              rentals: 'Rental History',
+              settings: 'Settings',
+            };
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-6 py-3 text-xs font-bold tracking-widest uppercase transition-all ${
+                  tab === t ? 'bg-red-600 text-white' : 'border border-white/10 text-zinc-500 hover:text-white'
+                }`}
+              >
+                {labels[t]}
+              </button>
+            );
+          })}
         </div>
 
         {/* Casino history */}
@@ -243,6 +277,34 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Achievements */}
+        {tab === 'achievements' && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {ACHIEVEMENTS.map((a) => {
+              const unlocked = !!unlockedAchievements[a.id];
+              return (
+                <div
+                  key={a.id}
+                  className={`p-4 border text-center transition-all ${
+                    unlocked
+                      ? 'border-yellow-500/30 bg-yellow-500/5'
+                      : 'border-white/[0.04] opacity-40'
+                  }`}
+                >
+                  <span className="text-2xl block mb-2">{a.icon}</span>
+                  <p className={`font-bold text-sm ${unlocked ? 'text-white' : 'text-zinc-600'}`}>{a.name}</p>
+                  <p className="text-zinc-500 text-[10px] mt-1">{a.description}</p>
+                  {unlocked && (
+                    <p className="text-yellow-500/60 text-[9px] mt-2">
+                      {new Date(unlockedAchievements[a.id]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -292,32 +354,71 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {friends.map((f: Friend) => (
-                  <motion.div
-                    key={f.username}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="border border-white/[0.06] p-4 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 border border-white/10 flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">{f.username[0].toUpperCase()}</span>
-                      </div>
-                      <div>
-                        <p className="text-white font-bold text-sm">@{f.username}</p>
-                        <p className="text-zinc-600 text-[10px]">
-                          Added {new Date(f.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleRemoveFriend(f.username)}
-                      className="text-zinc-600 text-[10px] font-bold tracking-wider uppercase hover:text-red-400 transition-colors"
+                {friends.map((f: Friend) => {
+                  const online = Object.values(onlineUsers).find(u => u.username.toLowerCase() === f.username.toLowerCase());
+                  const GAME_NAMES: Record<string, string> = {
+                    mp_crash: 'Crash', mp_blackjack: 'Blackjack', mp_craps: 'Craps',
+                    mp_dominoes: 'Dominoes', mp_poker: 'Poker', mp_spades: 'Spades', mp_hood_craps: 'Hood Craps',
+                  };
+                  return (
+                    <motion.div
+                      key={f.username}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="border border-white/[0.06] p-4 flex items-center justify-between"
                     >
-                      Remove
-                    </button>
-                  </motion.div>
-                ))}
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 border border-white/10 flex items-center justify-center relative">
+                          <span className="text-white font-bold text-sm">{f.username[0].toUpperCase()}</span>
+                          {online && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border border-black rounded-full" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-white font-bold text-sm">@{f.username}</p>
+                          {online ? (
+                            <p className="text-green-400 text-[10px] font-bold">
+                              Online{online.game ? ` · Playing ${GAME_NAMES[online.game] || online.game}` : ''}
+                            </p>
+                          ) : (
+                            <p className="text-zinc-600 text-[10px]">
+                              Added {new Date(f.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {online?.game && online.room && (
+                          <Link
+                            href={`/casino?game=${online.game}&room=${online.room}`}
+                            className="text-green-400 text-[10px] font-bold tracking-wider uppercase hover:text-green-300 transition-colors"
+                          >
+                            Join
+                          </Link>
+                        )}
+                        <button
+                          onClick={() => {
+                            const code = generateRoomCode();
+                            const game = 'mp_blackjack';
+                            const url = `${window.location.origin}/casino?game=${game}&room=${code}&challenge=${userData?.user.name || 'Friend'}`;
+                            navigator.clipboard.writeText(url).catch(() => {});
+                            setCopiedChallenge(f.username);
+                            setTimeout(() => setCopiedChallenge(null), 2000);
+                          }}
+                          className="text-yellow-400 text-[10px] font-bold tracking-wider uppercase hover:text-yellow-300 transition-colors"
+                        >
+                          {copiedChallenge === f.username ? 'Link Copied!' : 'Challenge'}
+                        </button>
+                        <button
+                          onClick={() => handleRemoveFriend(f.username)}
+                          className="text-zinc-600 text-[10px] font-bold tracking-wider uppercase hover:text-red-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </div>

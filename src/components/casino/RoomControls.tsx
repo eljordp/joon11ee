@@ -14,6 +14,7 @@ interface Props {
   initialRoom?: string;
   authError?: string;
   hasPassword?: boolean;
+  onWatch?: (code: string, password?: string) => void;
 }
 
 function generateRoomCode(): string {
@@ -25,7 +26,7 @@ function generateRoomCode(): string {
 
 export { generateRoomCode };
 
-export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeaveRoom, playerCount, connected, gameId, initialRoom, authError, hasPassword }: Props) {
+export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeaveRoom, playerCount, connected, gameId, initialRoom, authError, hasPassword, onWatch }: Props) {
   const [joinInput, setJoinInput] = useState('');
   const [showJoin, setShowJoin] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -36,6 +37,7 @@ export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeave
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [watchMode, setWatchMode] = useState(false);
   const autoJoinedRef = useRef(false);
 
   // Auto-join room from invite link
@@ -199,7 +201,14 @@ export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeave
           </div>
         ) : showJoin ? (
           <form
-            onSubmit={(e) => { e.preventDefault(); if (joinInput.trim()) handleJoin(joinInput.trim().toUpperCase()); setShowJoin(false); setJoinInput(''); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const code = joinInput.trim().toUpperCase();
+              if (!code) return;
+              if (watchMode && onWatch) onWatch(code);
+              else handleJoin(code);
+              setShowJoin(false); setJoinInput(''); setWatchMode(false);
+            }}
             className="flex items-center gap-1"
           >
             <input
@@ -209,12 +218,12 @@ export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeave
               placeholder="ROOM CODE"
               maxLength={8}
               autoFocus
-              className="w-24 px-2 py-1.5 text-xs font-bold font-mono bg-black border border-white/20 text-white outline-none focus:border-green-500 transition-colors uppercase text-center tracking-wider"
+              className={`w-24 px-2 py-1.5 text-xs font-bold font-mono bg-black border text-white outline-none transition-colors uppercase text-center tracking-wider ${watchMode ? 'border-blue-500/30 focus:border-blue-500' : 'border-white/20 focus:border-green-500'}`}
             />
-            <button type="submit" className="px-3 py-1.5 bg-green-600 text-white text-[10px] font-bold tracking-wider uppercase hover:bg-green-500 transition-all">
-              Go
+            <button type="submit" className={`px-3 py-1.5 text-white text-[10px] font-bold tracking-wider uppercase transition-all ${watchMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-green-600 hover:bg-green-500'}`}>
+              {watchMode ? 'Watch' : 'Go'}
             </button>
-            <button type="button" onClick={() => setShowJoin(false)} className="px-2 py-1.5 text-zinc-600 text-[10px] hover:text-white transition-colors">
+            <button type="button" onClick={() => { setShowJoin(false); setWatchMode(false); }} className="px-2 py-1.5 text-zinc-600 text-[10px] hover:text-white transition-colors">
               X
             </button>
           </form>
@@ -232,6 +241,14 @@ export default function RoomControls({ roomId, onCreateRoom, onJoinRoom, onLeave
             >
               Join Room
             </button>
+            {onWatch && (
+              <button
+                onClick={() => { setShowJoin(true); setWatchMode(true); }}
+                className="px-3 py-1.5 border border-blue-500/20 text-blue-400 text-[10px] font-bold tracking-wider uppercase hover:bg-blue-500/10 transition-all"
+              >
+                Watch
+              </button>
+            )}
           </>
         )}
       </div>

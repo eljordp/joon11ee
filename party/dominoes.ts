@@ -35,6 +35,7 @@ const TILES_PER_PLAYER = 7;
 
 export default class DominoesServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   hands = new Map<string, DominoTile[]>();
   boneyard: DominoTile[] = [];
   state: DomState;
@@ -55,9 +56,16 @@ export default class DominoesServer implements Party.Server {
   onConnect(conn: Party.Connection) {
     this.sendState(conn);
     conn.send(JSON.stringify({ type: 'players', players: this.getPlayerList() }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
   }
 
   onClose(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
     const player = this.players.get(conn.id);
     this.players.delete(conn.id);
     this.hands.delete(conn.id);
@@ -88,6 +96,13 @@ export default class DominoesServer implements Party.Server {
       case 'play': this.handlePlay(sender, data); break;
       case 'draw': this.handleDraw(sender); break;
       case 'chat': this.handleChat(sender, data); break;
+      case 'reaction': {
+        const p = this.players.get(sender.id);
+        if (!p) break;
+        const emoji = String(data.emoji || '').slice(0, 4);
+        if (emoji) this.broadcast({ type: 'reaction', playerId: sender.id, playerName: p.name, emoji });
+        break;
+      }
     }
   }
 
@@ -105,12 +120,21 @@ export default class DominoesServer implements Party.Server {
     if (!this.hostId) this.hostId = conn.id;
     if (!this.state.playerOrder.includes(conn.id)) this.state.playerOrder.push(conn.id);
     if (!this.state.scores[conn.id]) this.state.scores[conn.id] = 0;
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      this.sendState(conn);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
     this.broadcast({ type: 'player_joined', player });
     this.broadcastPlayers();
     this.broadcastState();
   }
 
   private handleReady(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'waiting') return;
     if (this.state.readyPlayers.includes(conn.id)) {
       this.state.readyPlayers = this.state.readyPlayers.filter(id => id !== conn.id);
@@ -124,6 +148,7 @@ export default class DominoesServer implements Party.Server {
   }
 
   private handlePlay(conn: Party.Connection, data: Record<string, unknown>) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'playing' || conn.id !== this.state.activePlayerId) return;
     const tileId = data.tileId as number;
     const end = data.end as 'left' | 'right';
@@ -171,6 +196,7 @@ export default class DominoesServer implements Party.Server {
   }
 
   private handleDraw(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'playing' || conn.id !== this.state.activePlayerId) return;
     if (this.boneyard.length === 0) return;
     const tile = this.boneyard.pop()!;

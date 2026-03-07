@@ -40,6 +40,7 @@ const PLACE_ODDS: Record<number, [number, number]> = {
 
 export default class CrapsServer implements Party.Server {
   players = new Map<string, Player>();
+  spectators = new Set<string>();
   playerBets = new Map<string, CrapsBet[]>();
   state: CrapsState;
   bettingTimer: ReturnType<typeof setInterval> | null = null;
@@ -59,9 +60,16 @@ export default class CrapsServer implements Party.Server {
   onConnect(conn: Party.Connection) {
     conn.send(JSON.stringify({ type: 'state', state: this.getState() }));
     conn.send(JSON.stringify({ type: 'players', players: [...this.players.values()] }));
+    conn.send(JSON.stringify({ type: "spectator_count", count: this.spectators.size }));
   }
 
   onClose(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) {
+      this.spectators.delete(conn.id);
+      this.players.delete(conn.id);
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      return;
+    }
     const player = this.players.get(conn.id);
     this.players.delete(conn.id);
     this.playerBets.delete(conn.id);
@@ -90,6 +98,13 @@ export default class CrapsServer implements Party.Server {
       case 'roll': this.handleRoll(sender); break;
       case 'skip': this.handleSkip(sender); break;
       case 'chat': this.handleChat(sender, data); break;
+      case 'reaction': {
+        const p = this.players.get(sender.id);
+        if (!p) break;
+        const emoji = String(data.emoji || '').slice(0, 4);
+        if (emoji) this.broadcast({ type: 'reaction', playerId: sender.id, playerName: p.name, emoji });
+        break;
+      }
     }
   }
 
@@ -105,12 +120,21 @@ export default class CrapsServer implements Party.Server {
     this.players.set(conn.id, player);
     if (!this.hostId) this.hostId = conn.id;
     if (!this.state.shooterOrder.includes(conn.id)) this.state.shooterOrder.push(conn.id);
+    if (data.spectate) {
+      this.spectators.add(conn.id);
+      conn.send(JSON.stringify({ type: "joined_as_spectator" }));
+      conn.send(JSON.stringify({ type: 'state', state: this.getState() }));
+      this.broadcast({ type: "spectator_count", count: this.spectators.size });
+      this.broadcastPlayers();
+      return;
+    }
     this.broadcast({ type: 'player_joined', player });
     this.broadcastPlayers();
     if (this.state.phase === 'waiting' && this.players.size >= 1) this.startBetting();
   }
 
   private handleBet(conn: Party.Connection, data: Record<string, unknown>) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'betting' && this.state.phase !== 'point_betting') return;
     const betType = data.betType as string;
     const amount = data.amount as number;
@@ -134,6 +158,7 @@ export default class CrapsServer implements Party.Server {
   }
 
   private handleRoll(conn: Party.Connection) {
+    if (this.spectators.has(conn.id)) return;
     if (this.state.phase !== 'rolling' && this.state.phase !== 'point_rolling') return;
     if (conn.id !== this.state.shooterId) return;
     this.clearAutoRoll();

@@ -6,9 +6,11 @@ import { sounds } from '@/lib/sounds';
 import PartySocket from 'partysocket';
 import BetControls from './BetControls';
 import MultiplayerChat from './MultiplayerChat';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import PlayerList, { type PlayerListEntry } from './PlayerList';
 import CountdownTimer from './CountdownTimer';
 import RoomControls, { generateRoomCode } from './RoomControls';
+import SpectatorBadge from './SpectatorBadge';
 import type { ChatMessage, CashoutEntry } from '@/lib/multiplayer/types';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
@@ -43,6 +45,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
   const [bet, setBet] = useState(100);
   const [serverState, setServerState] = useState<ServerState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [cashoutFeed, setCashoutFeed] = useState<CashoutEntry[]>([]);
   const [hasBet, setHasBet] = useState(false);
   const [hasCashed, setHasCashed] = useState(false);
@@ -54,6 +57,8 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
   const [playerCount, setPlayerCount] = useState(0);
   const [myId, setMyId] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectatorCount, setSpectatorCount] = useState(0);
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
@@ -66,10 +71,11 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
 
   const passwordRef = useRef<string | undefined>(undefined);
 
-  const connectToRoom = useCallback((id: string, password?: string) => {
+  const connectToRoom = useCallback((id: string, password?: string, spectate?: boolean) => {
     if (wsRef.current) wsRef.current.close();
     passwordRef.current = password;
     setAuthError(undefined);
+    setIsSpectating(!!spectate);
 
     const ws = new PartySocket({
       host: PARTYKIT_HOST,
@@ -80,7 +86,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);
-      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password: passwordRef.current }));
+      ws.send(JSON.stringify({ type: 'join', name: playerName.current, avatar: '🎮', password: passwordRef.current, spectate: !!spectate }));
     });
 
     ws.addEventListener('message', (evt) => {
@@ -193,6 +199,17 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         break;
       }
 
+      case 'reaction': {
+        const emoji = String(data.emoji || '');
+        if (emoji) {
+          const id = Date.now() + Math.random();
+          const x = 10 + Math.random() * 80;
+          setFloatingReactions(prev => [...prev, { id, emoji, x }]);
+          setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== id)), 2500);
+        }
+        break;
+      }
+
       case 'countdown': {
         // Handled via state updates
         break;
@@ -201,6 +218,16 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
       case 'auth_error': {
         setAuthError(data.message as string);
         setConnected(false);
+        break;
+      }
+
+      case 'spectator_count': {
+        setSpectatorCount(data.count as number);
+        break;
+      }
+
+      case 'joined_as_spectator': {
+        setIsSpectating(true);
         break;
       }
     }
@@ -222,6 +249,10 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     connectToRoom(code, password);
   }, [connectToRoom]);
 
+  const watchRoom = useCallback((code: string, password?: string) => {
+    connectToRoom(code, password, true);
+  }, [connectToRoom]);
+
   const leaveRoom = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     wsRef.current = null;
@@ -235,6 +266,8 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     setCashoutFeed([]);
     setMultiplier(1.0);
     setTrail([]);
+    setIsSpectating(false);
+    setSpectatorCount(0);
     prevPhaseRef.current = '';
     if (animRef.current) { clearInterval(animRef.current); animRef.current = null; }
   }, []);
@@ -257,6 +290,10 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
     }
   }, [connected]);
 
+  const sendReaction = useCallback((emoji: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'reaction', emoji }));
+  }, []);
+
   // If not connected, show room controls only
   if (!connected || !serverState) {
     return (
@@ -275,6 +312,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
           gameId={gameId}
           initialRoom={initialRoom || undefined}
           authError={authError}
+          onWatch={watchRoom}
         />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer crash</p>
@@ -328,7 +366,10 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         gameId={gameId}
         initialRoom={initialRoom || undefined}
         authError={authError}
+        onWatch={watchRoom}
       />
+
+      <SpectatorBadge count={spectatorCount} isSpectating={isSpectating} />
 
       {/* History pills */}
       {history.length > 0 && (
@@ -356,6 +397,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         <div className="lg:col-span-2 space-y-3">
           {/* Rocket display */}
           <div className="relative h-48 sm:h-56 border border-white/[0.04] bg-black overflow-hidden">
+            <FloatingReactions reactions={floatingReactions} />
             {phase === 'crashed' && <div className="absolute inset-0 bg-red-500/5 pointer-events-none" />}
             {hasCashed && phase !== 'betting' && <div className="absolute inset-0 bg-green-500/5 pointer-events-none animate-pulse" />}
 
@@ -447,7 +489,7 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
           </AnimatePresence>
 
           {/* Controls */}
-          {phase === 'betting' && !hasBet && (
+          {!isSpectating && phase === 'betting' && !hasBet && (
             <div className="space-y-3">
               <CountdownTimer totalSeconds={7} remainingSeconds={bettingTimeLeft} label="Betting closes in" />
               <BetControls balance={balance} bet={bet} setBet={setBet} disabled={false} />
@@ -459,13 +501,13 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
             </div>
           )}
 
-          {phase === 'betting' && hasBet && (
+          {!isSpectating && phase === 'betting' && hasBet && (
             <div className="text-center text-green-400/60 text-xs font-bold py-4 animate-pulse tracking-wider uppercase">
               Bet placed — waiting for launch...
             </div>
           )}
 
-          {phase === 'flying' && hasBet && !hasCashed && (
+          {!isSpectating && phase === 'flying' && hasBet && !hasCashed && (
             <button onClick={cashOut}
               className="w-full bg-green-600 text-white py-5 text-base font-black tracking-widest uppercase hover:bg-green-500 transition-all animate-pulse shadow-[0_0_30px_rgba(34,197,94,0.3)]"
             >
@@ -473,14 +515,18 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
             </button>
           )}
 
-          {phase === 'flying' && hasCashed && (
+          {!isSpectating && phase === 'flying' && hasCashed && (
             <div className="text-center text-yellow-400/60 text-xs font-bold py-4 animate-pulse tracking-wider uppercase">
               cashed out — watching for crash...
             </div>
           )}
 
-          {phase === 'flying' && !hasBet && (
+          {!isSpectating && phase === 'flying' && !hasBet && (
             <div className="text-center text-zinc-600 text-xs py-4 tracking-wider uppercase">watching round...</div>
+          )}
+
+          {isSpectating && (phase === 'betting' || phase === 'flying') && (
+            <div className="text-center text-blue-400/60 text-xs py-4 tracking-wider uppercase">spectating...</div>
           )}
 
           {phase === 'crashed' && (
@@ -512,6 +558,9 @@ export default function MultiplayerCrash({ balance, onWin, onLose, onLeaderboard
         {/* Right sidebar */}
         <div className="space-y-3">
           <PlayerList players={playerListEntries} title="Players" />
+          <div className="flex items-center gap-2">
+            <EmotePicker onSelect={sendReaction} disabled={!connected} />
+          </div>
           <MultiplayerChat messages={chatMessages} onSend={sendChat} collapsed />
         </div>
       </div>
