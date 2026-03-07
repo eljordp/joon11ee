@@ -86,7 +86,7 @@ export default function MultiplayerHoodCraps({ balance, onWin, onLose, onLeaderb
     passwordRef.current = password;
     setAuthError(undefined);
     setIsSpectating(false);
-    const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'hood-craps', room: id });
+    const ws = new PartySocket({ host: PARTYKIT_HOST, party: 'hoodcraps', room: id });
     ws.addEventListener('open', () => {
       setConnected(true);
       setMyId(ws.id);

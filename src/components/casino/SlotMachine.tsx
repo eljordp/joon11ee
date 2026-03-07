@@ -68,6 +68,9 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
   const [jackpotDisplay, setJackpotDisplay] = useState(currentJackpot);
   const [showOdds, setShowOdds] = useState(false);
   const [nearMiss, setNearMiss] = useState(false);
+  const [dramaticMode, setDramaticMode] = useState(false);
+  const [lamboExplosion, setLamboExplosion] = useState<number | null>(null);
+  const [streakBonus, setStreakBonus] = useState<{ streak: number; amount: number } | null>(null);
   const intervals = useRef<ReturnType<typeof setInterval>[]>([]);
   const autoSpinRef = useRef(false);
   const betRef = useRef(bet);
@@ -108,7 +111,19 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       const winAmount = currentBet * p.mult;
       if (p.mult >= 25) sounds.jackpot(); else sounds.win();
       onWin(winAmount, currentBet);
-      setStreak(s => s + 1);
+      setStreak(prev => {
+        const s = prev + 1;
+        // Streak bonuses
+        if (s === 3 || s === 5 || s === 10) {
+          const bonusMult = s === 10 ? 5 : s === 5 ? 3 : 1.5;
+          const bonus = Math.floor(currentBet * bonusMult);
+          onWin(bonus, 0);
+          setStreakBonus({ streak: s, amount: bonus });
+          setTimeout(() => setStreakBonus(null), 2500);
+          sounds.jackpot();
+        }
+        return s;
+      });
       setTotalWins(w => w + 1);
       setShaking(true);
       setTimeout(() => setShaking(false), p.mult >= 25 ? 1200 : 500);
@@ -123,7 +138,18 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
       const winAmount = Math.floor(currentBet * 2);
       sounds.win();
       onWin(winAmount, currentBet);
-      setStreak(s => s + 1);
+      setStreak(prev => {
+        const s = prev + 1;
+        if (s === 3 || s === 5 || s === 10) {
+          const bonusMult = s === 10 ? 5 : s === 5 ? 3 : 1.5;
+          const bonus = Math.floor(currentBet * bonusMult);
+          onWin(bonus, 0);
+          setStreakBonus({ streak: s, amount: bonus });
+          setTimeout(() => setStreakBonus(null), 2500);
+          sounds.jackpot();
+        }
+        return s;
+      });
       setTotalWins(w => w + 1);
       setResult({ text: `+$${winAmount.toLocaleString()}`, sub: 'PAIR — 2x', win: true });
     } else {
@@ -149,6 +175,8 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
     sounds.bet();
     setResult(null);
     setNearMiss(false);
+    setDramaticMode(false);
+    setLamboExplosion(null);
     setSpinning([true, true, true]);
 
     // Generate final symbols
@@ -160,57 +188,122 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
     });
     setReelStrips(newStrips);
 
-    // Detect near-miss (first 2 match but 3rd doesn't)
-    const isNearMiss = finalSymbols[0] === finalSymbols[1] && finalSymbols[1] !== finalSymbols[2];
+    // Detect outcome for dramatic effects
+    const firstTwoMatch = finalSymbols[0] === finalSymbols[1];
+    const isTriple = firstTwoMatch && finalSymbols[1] === finalSymbols[2];
+    const isLambo = isTriple && finalSymbols[0] === '🏎️';
 
-    // Animate each reel
-    [0, 1, 2].forEach((i) => {
+    const landReel2 = () => {
+      sounds.reelStop();
+      setReelPositions(prev => { const n = [...prev]; n[2] = REEL_SIZE - 1; return n; });
+      setSpinning(prev => { const n = [...prev]; n[2] = false; return n; });
+      setDramaticMode(false);
+    };
+
+    const finalize = () => {
+      if (firstTwoMatch && !isTriple) {
+        setNearMiss(true);
+        setTimeout(() => setNearMiss(false), 800);
+      }
+      checkResult(finalSymbols, currentBet);
+      // Auto-spin: stop on lambo, pause 3s on triple, normal otherwise
+      if (isLambo) {
+        if (autoSpinRef.current) setAutoSpin(false);
+      } else if (isTriple && autoSpinRef.current) {
+        setTimeout(() => { if (autoSpinRef.current) spin(); }, 3000);
+      } else if (autoSpinRef.current) {
+        setTimeout(() => spin(), 400 / speed);
+      }
+    };
+
+    // ── Reels 0 & 1: normal ──
+    [0, 1].forEach((i) => {
       let pos = 0;
       intervals.current[i] = setInterval(() => {
         pos++;
         if (pos % 4 === 0) sounds.slotTick();
-        setReelPositions((prev) => {
-          const next = [...prev];
-          next[i] = pos % REEL_SIZE;
-          return next;
-        });
+        setReelPositions(prev => { const n = [...prev]; n[i] = pos % REEL_SIZE; return n; });
       }, (60 + i * 15) / speed);
 
-      // Stop reel — last reel gets extra delay on near-miss
-      const extraDelay = i === 2 && isNearMiss ? 600 / speed : 0;
       setTimeout(() => {
         clearInterval(intervals.current[i]);
-
-        // Near-miss: flash the indicator before the last reel stops
-        if (i === 2 && isNearMiss) {
-          setNearMiss(true);
-          setTimeout(() => setNearMiss(false), 800);
-        }
-
         sounds.reelStop();
-        setReelPositions((prev) => {
-          const next = [...prev];
-          next[i] = REEL_SIZE - 1;
-          return next;
-        });
-        setSpinning((prev) => {
-          const next = [...prev];
-          next[i] = false;
-          return next;
-        });
-
-        // Last reel stopped
-        if (i === 2) {
-          setTimeout(() => {
-            checkResult(finalSymbols, currentBet);
-            // Auto-spin chain
-            if (autoSpinRef.current) {
-              setTimeout(() => spin(), 400 / speed);
-            }
-          }, 150 / speed);
-        }
-      }, (800 + i * 400 + extraDelay) / speed);
+        setReelPositions(prev => { const n = [...prev]; n[i] = REEL_SIZE - 1; return n; });
+        setSpinning(prev => { const n = [...prev]; n[i] = false; return n; });
+      }, (800 + i * 400) / speed);
     });
+
+    // ── Reel 2: start spinning ──
+    let pos2 = 0;
+    intervals.current[2] = setInterval(() => {
+      pos2++;
+      if (pos2 % 4 === 0) sounds.slotTick();
+      setReelPositions(prev => { const n = [...prev]; n[2] = pos2 % REEL_SIZE; return n; });
+    }, 90 / speed);
+
+    if (isLambo) {
+      // ═══ LAMBO 69x: hyper spin 5s → slowdown → explosion ═══
+      setTimeout(() => {
+        clearInterval(intervals.current[2]);
+        setDramaticMode(true);
+        let hPos = pos2;
+        intervals.current[2] = setInterval(() => {
+          hPos += 2;
+          setReelPositions(prev => { const n = [...prev]; n[2] = hPos % REEL_SIZE; return n; });
+        }, 25);
+        setTimeout(() => {
+          clearInterval(intervals.current[2]);
+          let sPos = hPos;
+          let d = 30;
+          const slowTick = () => {
+            sPos++;
+            if (d > 100) sounds.slotTick();
+            setReelPositions(prev => { const n = [...prev]; n[2] = sPos % REEL_SIZE; return n; });
+            d *= 1.25;
+            if (d >= 500) {
+              landReel2();
+              setLamboExplosion(currentBet * 69);
+              setTimeout(finalize, 500);
+              setTimeout(() => setLamboExplosion(null), 5000);
+              return;
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            intervals.current[2] = setTimeout(slowTick, d) as any;
+          };
+          slowTick();
+        }, 5000);
+      }, (800 + 400 + 300) / speed);
+
+    } else if (firstTwoMatch) {
+      // ═══ DRAMATIC SLOWDOWN: first 2 match → tension on reel 3 ═══
+      setTimeout(() => {
+        clearInterval(intervals.current[2]);
+        setDramaticMode(true);
+        let sPos = pos2;
+        let d = 60;
+        const slowTick = () => {
+          sPos++;
+          if (d > 80) sounds.slotTick();
+          setReelPositions(prev => { const n = [...prev]; n[2] = sPos % REEL_SIZE; return n; });
+          d *= 1.12;
+          if (d >= 400) {
+            setTimeout(() => { landReel2(); setTimeout(finalize, 150); }, 300);
+            return;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          intervals.current[2] = setTimeout(slowTick, d) as any;
+        };
+        slowTick();
+      }, (800 + 400 + 300) / speed);
+
+    } else {
+      // ═══ NORMAL ═══
+      setTimeout(() => {
+        clearInterval(intervals.current[2]);
+        landReel2();
+        setTimeout(finalize, 150 / speed);
+      }, (800 + 2 * 400) / speed);
+    }
   }, [spinning, speed, checkResult]);
 
   // Auto-spin trigger
@@ -239,6 +332,69 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-gradient-to-t from-green-500/10 via-transparent to-yellow-500/5 pointer-events-none z-0"
           />
+        )}
+      </AnimatePresence>
+
+      {/* LAMBO 69x explosion overlay */}
+      <AnimatePresence>
+        {lamboExplosion !== null && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.3 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.5 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+          >
+            <div className="absolute inset-0 bg-black/95" />
+            {[...Array(20)].map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+                animate={{
+                  x: (Math.random() - 0.5) * 600,
+                  y: (Math.random() - 0.5) * 600,
+                  scale: [0, 2, 0],
+                  opacity: [1, 1, 0],
+                }}
+                transition={{ duration: 2, delay: Math.random() * 0.5 }}
+                className="absolute text-2xl"
+              >
+                {['🏎️', '💰', '🔥', '💎', '⭐'][i % 5]}
+              </motion.div>
+            ))}
+            <div className="relative text-center z-10">
+              <motion.p
+                animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.2, 1] }}
+                transition={{ duration: 0.6, repeat: Infinity }}
+                className="text-8xl mb-6"
+              >
+                🏎️
+              </motion.p>
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="text-yellow-400 text-[12px] tracking-[0.5em] uppercase font-bold mb-3"
+              >
+                LAMBO JACKPOT
+              </motion.p>
+              <motion.p
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.3, 1] }}
+                transition={{ delay: 0.5, duration: 0.5 }}
+                className="text-white text-6xl font-black mb-2"
+              >
+                69x
+              </motion.p>
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.8 }}
+                className="text-green-400 text-4xl font-black font-mono"
+              >
+                +${lamboExplosion.toLocaleString()}
+              </motion.p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -307,9 +463,11 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
               <div
                 key={reelIndex}
                 className={`relative w-24 sm:w-28 h-[216px] sm:h-[252px] border-2 overflow-hidden bg-black transition-colors duration-300 ${
-                  result?.win && !isSpinning
-                    ? result.big ? 'border-yellow-500/60 shadow-[0_0_20px_rgba(234,179,8,0.2)]' : 'border-green-500/40'
-                    : 'border-white/10'
+                  dramaticMode && reelIndex === 2
+                    ? 'border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.3)] animate-pulse'
+                    : result?.win && !isSpinning
+                      ? result.big ? 'border-yellow-500/60 shadow-[0_0_20px_rgba(234,179,8,0.2)]' : 'border-green-500/40'
+                      : 'border-white/10'
                 }`}
               >
                 {/* Fade edges */}
@@ -350,6 +508,28 @@ export default function SlotMachine({ balance, onWin, onLose }: Props) {
               </p>
               <p className={`text-xs mt-1 ${result.win ? (result.big ? 'text-yellow-500/70' : 'text-green-500/70') : 'text-zinc-600'}`}>
                 {result.sub}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Streak bonus overlay */}
+        <AnimatePresence>
+          {streakBonus && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="text-center mb-4 py-3 px-4 bg-gradient-to-r from-yellow-500/10 via-yellow-500/20 to-yellow-500/10 border border-yellow-500/30"
+            >
+              <p className="text-yellow-400 text-lg font-black">
+                {streakBonus.streak}x STREAK BONUS
+              </p>
+              <p className="text-green-400 text-xl font-black font-mono">
+                +${streakBonus.amount.toLocaleString()}
+              </p>
+              <p className="text-yellow-500/60 text-[9px] tracking-wider uppercase mt-1">
+                {streakBonus.streak >= 10 ? 'LEGENDARY — 5x bet bonus' : streakBonus.streak >= 5 ? 'ON FIRE — 3x bet bonus' : 'HOT — 1.5x bet bonus'}
               </p>
             </motion.div>
           )}

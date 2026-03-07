@@ -9,7 +9,7 @@
     "dominoes": "party/dominoes.ts",
     "poker": "party/poker.ts",
     "spades": "party/spades.ts",
-    "hood-craps": "party/hood-craps.ts",
+    "hoodcraps": "party/hood-craps.ts",
     "leaderboard": "party/leaderboard.ts",
     "presence": "party/presence.ts",
     "tournament": "party/tournament.ts"

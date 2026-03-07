@@ -33,13 +33,15 @@ const MultiplayerPoker = dynamic(() => import('@/components/casino/MultiplayerPo
 const MultiplayerSpades = dynamic(() => import('@/components/casino/MultiplayerSpades'), { ssr: false });
 const MultiplayerHoodCraps = dynamic(() => import('@/components/casino/MultiplayerHoodCraps'), { ssr: false });
 const MultiplayerTournament = dynamic(() => import('@/components/casino/MultiplayerTournament'), { ssr: false });
+const JackpotSlots = dynamic(() => import('@/components/casino/JackpotSlots'), { ssr: false });
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
-type Game = 'slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'solo_craps' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades' | 'mp_hood_craps' | 'tournament';
+type Game = 'slots' | 'jackpot_slots' | 'roulette' | 'blackjack' | 'crash' | 'crossy' | 'mp_crash' | 'mp_blackjack' | 'solo_craps' | 'mp_craps' | 'mp_dominoes' | 'mp_poker' | 'mp_spades' | 'mp_hood_craps' | 'tournament';
 
 const GAMES: { id: Game; name: string; emoji: string; desc: string; live?: boolean }[] = [
   { id: 'slots', name: 'Slots', emoji: '🎰', desc: 'Match 3 and go crazy' },
+  { id: 'jackpot_slots', name: 'Jackpot Slots', emoji: '💎', desc: '5 reels, 4 jackpots' },
   { id: 'roulette', name: 'Roulette', emoji: '🎯', desc: 'Pick a side' },
   { id: 'blackjack', name: 'Blackjack', emoji: '🃏', desc: 'Beat the dealer' },
   { id: 'crash', name: 'Crash', emoji: '🚀', desc: 'Cash out before boom' },
@@ -475,6 +477,9 @@ export default function CasinoPage() {
           >
             {activeGame === 'slots' && (
               <SlotMachine balance={balance} onWin={handleWin} onLose={handleLose} />
+            )}
+            {activeGame === 'jackpot_slots' && (
+              <JackpotSlots balance={balance} onWin={handleWin} onLose={handleLose} />
             )}
             {activeGame === 'roulette' && (
               <Roulette balance={balance} onWin={handleWin} onLose={handleLose} />
