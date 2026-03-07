@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { cities, getCarsByCity, formatPrice, type City } from '@/data/fleet';
@@ -7,9 +8,9 @@ import RevealOnScroll from '@/components/ui/RevealOnScroll';
 import ParticleBackground from '@/components/ui/ParticleBackground';
 
 const cityImages: Record<City, string> = {
-  mia: 'linear-gradient(135deg, #0a2a2a 0%, #051a1a 50%, #020f0f 100%)',
-  sf: 'linear-gradient(135deg, #1a1a3e 0%, #0a0a2e 50%, #050520 100%)',
-  la: 'linear-gradient(135deg, #2a1a0a 0%, #1a100a 50%, #0a0805 100%)',
+  mia: '/locations/miami.jpg',
+  sf: '/locations/san-francisco.jpg',
+  la: '/locations/los-angeles.jpg',
 };
 
 export default function LocationsPage() {
@@ -53,10 +54,13 @@ export default function LocationsPage() {
                 <div className="group relative overflow-hidden border border-white/[0.06] hover:border-red-600/20 transition-all duration-500">
                   <div className="grid grid-cols-1 lg:grid-cols-2">
                     {/* City visual */}
-                    <div className="relative aspect-[16/9] lg:aspect-auto overflow-hidden">
-                      <div
-                        className="absolute inset-0 transition-transform duration-700 group-hover:scale-105"
-                        style={{ background: cityImages[city] }}
+                    <div className="relative aspect-[16/9] lg:aspect-auto lg:min-h-[400px] overflow-hidden">
+                      <Image
+                        src={cityImages[city]}
+                        alt={cityData.fullName}
+                        fill
+                        className="object-cover transition-transform duration-700 group-hover:scale-105"
+                        sizes="(max-width: 1024px) 100vw, 50vw"
                       />
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/50 hidden lg:block" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent lg:hidden" />
