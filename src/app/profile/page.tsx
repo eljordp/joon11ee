@@ -203,8 +203,8 @@ export default function ProfilePage() {
             <p className="text-zinc-500 text-xs tracking-wider uppercase mt-1">Casino Balance</p>
           </div>
           <div className="p-5 border border-white/[0.06]">
-            <p className={`text-2xl font-bold font-mono ${casinoTotals.net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {casinoTotals.net >= 0 ? '+' : ''}{formatPrice(casinoTotals.net)}
+            <p className={`text-2xl font-bold font-mono ${userData.casinoBalance - 10000 >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {userData.casinoBalance - 10000 >= 0 ? '+' : ''}{formatPrice(userData.casinoBalance - 10000)}
             </p>
             <p className="text-zinc-500 text-xs tracking-wider uppercase mt-1">Net P&L</p>
           </div>

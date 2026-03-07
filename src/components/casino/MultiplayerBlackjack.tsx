@@ -7,7 +7,7 @@ import { isRed, type Card } from '@/lib/casino';
 import PartySocket from 'partysocket';
 import BetControls from './BetControls';
 import MultiplayerChat from './MultiplayerChat';
-import EmotePicker from './EmotePicker';
+import EmotePicker, { FloatingReactions } from './EmotePicker';
 import SpectatorBadge from './SpectatorBadge';
 import PlayerProfilePopup from './PlayerProfilePopup';
 import CountdownTimer from './CountdownTimer';
@@ -103,16 +103,19 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const [stats, setStats] = useState({ hands: 0, wins: 0, losses: 0, pushes: 0, streak: 0, bestWin: 0, sessionProfit: 0 });
   const [streakCelebration, setStreakCelebration] = useState<number | null>(null);
   const [reactions, setReactions] = useState<Map<number, { emoji: string; key: number }>>(new Map());
+  const [floatingReactions, setFloatingReactions] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [authError, setAuthError] = useState<string | undefined>();
   const [isSpectating, setIsSpectating] = useState(false);
   const [spectatorCount, setSpectatorCount] = useState(0);
   const [profilePlayer, setProfilePlayer] = useState<{ name: string; seatIndex: number } | null>(null);
   const [tableHistory, setTableHistory] = useState<{ round: number; players: { name: string; bet: number; profit: number }[] }[]>([]);
+  const [tableName, setTableName] = useState(username || '');
 
   const wsRef = useRef<PartySocket | null>(null);
   const prevPhaseRef = useRef<string>('');
   const playerName = useRef(username || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase());
-  useEffect(() => { if (username) playerName.current = username; }, [username]);
+  const handleMessageRef = useRef<(data: Record<string, unknown>, selfId: string) => void>(() => {});
+  useEffect(() => { if (username) { playerName.current = username; setTableName(username); } }, [username]);
 
   const updateStats = useCallback((outcome: 'win' | 'loss' | 'push', amount: number) => {
     setStats(prev => {
@@ -155,7 +158,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
 
     ws.addEventListener('message', (evt) => {
       const data = JSON.parse(evt.data);
-      handleServerMessage(data, ws.id);
+      handleMessageRef.current(data, ws.id);
     });
 
     ws.addEventListener('close', () => {
@@ -177,6 +180,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
         if (mySeat) {
           setSeated(true);
           setMySeatIndex(mySeat.index);
+        } else {
+          setSeated(false);
+          setMySeatIndex(null);
         }
 
         if (state.phase !== prevPhaseRef.current) {
@@ -197,7 +203,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
               setLastBet(mySeat.doubled ? mySeat.bet / 2 : mySeat.bet);
               if (mySeat.profit > 0) {
                 sounds.win();
-                onWin(mySeat.profit + mySeat.bet, mySeat.bet);
+                onWin(mySeat.profit, mySeat.bet);
                 updateStats('win', mySeat.profit);
                 const isBJ = mySeat.handValue === 21 && mySeat.hand.length === 2;
                 setResult({ text: `+$${mySeat.profit.toLocaleString()}`, sub: isBJ ? 'BLACKJACK' : `${mySeat.handValue} vs ${state.dealerHandValue}`, win: true });
@@ -266,10 +272,16 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       case 'reaction': {
         const seatIdx = data.seatIndex as number;
         const emoji = String(data.emoji || '🔥');
+        // Show on seat bubble if seated player
         if (seatIdx >= 0) {
           setReactions(prev => { const next = new Map(prev); next.set(seatIdx, { emoji, key: Date.now() }); return next; });
           setTimeout(() => setReactions(prev => { const next = new Map(prev); next.delete(seatIdx); return next; }), 2000);
         }
+        // Always show floating reaction too
+        const rId = Date.now() + Math.random();
+        const rx = 10 + Math.random() * 80;
+        setFloatingReactions(prev => [...prev, { id: rId, emoji, x: rx }]);
+        setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== rId)), 2500);
         break;
       }
 
@@ -289,6 +301,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       }
     }
   }, [onWin, onLose, updateStats]);
+
+  // Keep message handler ref in sync
+  useEffect(() => { handleMessageRef.current = handleServerMessage; }, [handleServerMessage]);
 
   useEffect(() => {
     return () => {
@@ -333,10 +348,9 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const hit = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'hit' })); sounds.cardDeal(); }, []);
   const stand = useCallback(() => { wsRef.current?.send(JSON.stringify({ type: 'stand' })); sounds.click(); }, []);
   const doubleDown = useCallback(() => {
-    if (balance < bet * 2) return;
     wsRef.current?.send(JSON.stringify({ type: 'double' }));
     sounds.bet();
-  }, [balance, bet]);
+  }, []);
 
   const sendChat = useCallback((text: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'chat', text }));
@@ -362,6 +376,22 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
           <h3 className="text-xl font-bold text-white">Blackjack Table</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 tracking-wider uppercase">Live</span>
         </div>
+        {/* Table name */}
+        <div className="border border-white/[0.06] px-4 py-3 flex items-center gap-3">
+          <span className="text-zinc-500 text-xs">Name:</span>
+          <input
+            type="text"
+            value={tableName}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^a-zA-Z0-9_. ]/g, '').slice(0, 16);
+              setTableName(v);
+              playerName.current = v || 'Player_' + Math.random().toString(36).slice(2, 6).toUpperCase();
+            }}
+            placeholder="Your table name"
+            maxLength={16}
+            className="flex-1 px-2 py-1.5 text-sm bg-black border border-white/10 text-white outline-none focus:border-green-500 transition-colors"
+          />
+        </div>
         <RoomControls roomId={roomId} onCreateRoom={createRoom} onJoinRoom={joinRoom} onLeaveRoom={leaveRoom} playerCount={playerCount} connected={false} gameId={gameId} initialRoom={initialRoom || undefined} authError={authError} />
         <div className="border border-white/[0.06] bg-zinc-950/50 p-8 text-center">
           <p className="text-zinc-500 text-sm mb-2">Create or join a room to play multiplayer blackjack</p>
@@ -374,12 +404,13 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
   const { phase, seats, dealerHand, dealerHandValue, dealerRevealed, activeSeatIndex, roundNumber, bettingTimeLeft, hostId, botIds } = serverState;
   const isMyTurn = mySeatIndex !== null && activeSeatIndex === mySeatIndex && phase === 'player_turns';
   const mySeat = mySeatIndex !== null ? seats[mySeatIndex] : null;
-  const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= bet * 2;
+  const canDouble = isMyTurn && mySeat && mySeat.hand.length === 2 && !mySeat.doubled && balance >= mySeat.bet;
   const isHost = myId !== null && hostId === myId;
   const botIdSet = new Set(botIds || []);
 
   return (
     <div className="space-y-3 relative">
+      <FloatingReactions reactions={floatingReactions} />
       {/* Streak celebration overlay */}
       <AnimatePresence>
         {streakCelebration && (
@@ -646,7 +677,7 @@ export default function MultiplayerBlackjack({ balance, onWin, onLose, onLeaderb
       </div>
 
       {/* Reactions */}
-      {seated && (
+      {connected && (
         <div className="flex items-center justify-center">
           <EmotePicker onSelect={sendReaction} />
         </div>
