@@ -29,6 +29,7 @@ function timeAgo(ts: number): string {
 }
 
 export let leaderboardWs: PartySocket | null = null;
+export let currentJackpot = 10000;
 
 export function reportWin(player: string, game: string, amount: number) {
   if (leaderboardWs?.readyState === WebSocket.OPEN) {
@@ -72,14 +73,16 @@ export default function GlobalLeaderboard({ username }: Props) {
         setDaily(data.daily || []);
         setWeekly(data.weekly || []);
         setAllTime(data.allTime || []);
-        if (data.jackpot !== undefined) setJackpot(data.jackpot);
+        if (data.jackpot !== undefined) { setJackpot(data.jackpot); currentJackpot = data.jackpot; }
       }
       if (data.type === 'jackpot_update') {
         setJackpot(data.jackpot);
+        currentJackpot = data.jackpot;
       }
       if (data.type === 'jackpot_won') {
         setJackpotWinner({ player: data.player, amount: data.amount });
         setJackpot(10000);
+        currentJackpot = 10000;
         setTimeout(() => setJackpotWinner(null), 5000);
       }
     });
