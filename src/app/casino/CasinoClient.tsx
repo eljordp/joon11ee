@@ -235,7 +235,7 @@ export default function CasinoPage() {
               CRYPTO <span className="text-red-600">CASINO</span>
             </h1>
             <p className="text-zinc-500 max-w-md mx-auto text-xs sm:text-sm">
-              $10K free chips. no real money. just vibes and W&apos;s.
+              pull up. play with friends. stack chips.
             </p>
           </div>
         </RevealOnScroll>
@@ -483,7 +483,7 @@ export default function CasinoPage() {
         {/* Disclaimer */}
         <div className="mt-10 text-center">
           <p className="text-zinc-800 text-[10px]">
-            play money only. no real crypto. for entertainment only. don&apos;t gamble irl.
+            for entertainment purposes only.
           </p>
         </div>
       </div>

@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
               display: 'flex',
             }}
           >
-            $10K FREE CHIPS • NO REAL MONEY
+            PLAY NOW • FREE TO JOIN
           </div>
         </div>
 

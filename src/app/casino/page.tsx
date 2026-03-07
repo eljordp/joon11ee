@@ -24,7 +24,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
   if (meta && room) {
     const title = `${meta.desc} | JOON11EE Casino`;
-    const description = `You've been invited to play ${meta.title}. $10K free chips, no real money. Jump in!`;
+    const description = `You've been invited to play ${meta.title} on JOON11EE. Pull up!`;
     const ogImageUrl = `/api/og?game=${game}`;
 
     return {
@@ -46,18 +46,18 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   }
 
   return {
-    title: 'JOON11EE Casino | Free Crypto Casino',
-    description: '$10K free chips. Blackjack, Poker, Crash, Craps, and more. No real money.',
+    title: 'JOON11EE Casino | Blackjack, Poker, Crash & More',
+    description: 'Multiplayer casino. Blackjack, Poker, Crash, Craps, Spades, and more. Play with friends.',
     openGraph: {
       title: 'JOON11EE Casino',
-      description: '$10K free chips. Blackjack, Poker, Crash, Craps, and more. No real money.',
+      description: 'Multiplayer casino. Blackjack, Poker, Crash, Craps, Spades, and more. Play with friends.',
       type: 'website',
       images: [{ url: '/api/og', width: 1200, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
       title: 'JOON11EE Casino',
-      description: '$10K free chips. Blackjack, Poker, Crash, Craps, and more.',
+      description: 'Multiplayer casino. Blackjack, Poker, Crash, Craps, Spades, and more.',
       images: ['/api/og'],
     },
   };
